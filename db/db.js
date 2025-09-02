@@ -2,11 +2,10 @@ import pkg from "pg";
 const { Pool } = pkg;
 
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "gestion_empresarial",
-  password: "*123456789*",
-  port: 5432,
+  connectionString: process.env.DATABASE_URL || "postgresql://postgres:*123456789*@localhost:5432/gestion_empresarial",
+  ssl: process.env.DATABASE_URL
+    ? { rejectUnauthorized: false } // Render requiere SSL
+    : false // en local no se usa SSL
 });
 
 export default pool;
