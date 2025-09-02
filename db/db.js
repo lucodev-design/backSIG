@@ -7,14 +7,14 @@ const { Pool } = pkg;
 let pool;
 
 if (process.env.DATABASE_URL) {
-  // 🌐 Configuración para Render
+  // 🌐 Render o producción
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }, // Render necesita SSL
+    ssl: { rejectUnauthorized: false }, // necesario en Render
   });
   console.log("✅ Usando conexión a Render (DATABASE_URL)");
 } else {
-  // 🖥️ Configuración local
+  // 🖥️ Local
   pool = new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,

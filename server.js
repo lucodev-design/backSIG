@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
-import pool from "./db/db.js"; // configuración de PostgreSQL
+import pool from "./db/db.js"; // Configuración de PostgreSQL
 
 // Cargar variables de entorno
 dotenv.config();
@@ -11,7 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: "*" // o la URL de tu frontend en producción, ejemplo: "https://mi-frontend.netlify.app"
+}));
 app.use(express.json());
 
 // Rutas principales
