@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
 import pool from "./db/db.js"; // configuración de PostgreSQL
 
+// Cargar variables de entorno
 dotenv.config();
 
 const app = express();
