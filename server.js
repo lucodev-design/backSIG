@@ -12,8 +12,18 @@ const PORT = process.env.PORT || 4000;
 
 // Middlewares
 app.use(cors({
-  origin: "*" // o la URL de tu frontend en producción, ejemplo: "https://mi-frontend.netlify.app"
+  origin: [
+    "http://localhost:3000",            // desarrollo local
+    "https://tu-frontend.netlify.app"   // producción (cambia con tu dominio real de Netlify)
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
+
+app.options("*", cors()); // 👈 Responde a preflight
+
+
 app.use(express.json());
 
 // Rutas principales
