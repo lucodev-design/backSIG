@@ -10,20 +10,18 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Middlewares
+// Middleware CORS
 app.use(cors({
   origin: [
     "http://localhost:3000",            // desarrollo local
-    "https://tu-frontend.netlify.app"   // producción (cambia con tu dominio real de Netlify)
+    "https://sig-imn.netlify.app"   // producción (cambia con tu dominio real de Netlify)
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
 
-app.options("*", cors()); // 👈 Responde a preflight
-
-
+// Middleware para parsear JSON
 app.use(express.json());
 
 // Rutas principales
