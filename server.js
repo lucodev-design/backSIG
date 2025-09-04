@@ -11,15 +11,21 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middleware CORS
-app.use(cors({
-  origin: [
-    "http://localhost:3000",            // desarrollo local
-    "https://sig-imn.netlify.app"   // producción (cambia con tu dominio real de Netlify)
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",        // Vite (frontend local)
+      "http://localhost:3000",        // CRA u otros
+      "https://sig-imn.netlify.app",  // Producción (tu Netlify)
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// Responder a preflight OPTIONS
+app.options("*", cors());
 
 // Middleware para parsear JSON
 app.use(express.json());
