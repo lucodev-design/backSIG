@@ -1,8 +1,9 @@
+// auth.controller.js
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-// 📌 LOGIN
+// ---- LOGIN (ya lo tienes) ----
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -17,6 +18,7 @@ export const login = async (req, res) => {
     }
 
     const user = result.rows[0];
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ message: "Contraseña incorrecta" });
@@ -28,17 +30,15 @@ export const login = async (req, res) => {
       { expiresIn: "1h" }
     );
 
-    res.json({
-      token,
-      user: { id: user.id, email: user.email, rol: user.rol, nombre: user.nombre }
-    });
+    res.json({ token, user: { id: user.id, email: user.email, rol: user.rol } });
+
   } catch (error) {
-    console.error("❌ Error en login:", error.message);
+    console.error(error);
     res.status(500).json({ message: "Error en el servidor" });
   }
 };
 
-// 📌 REGISTRO
+// ---- REGISTER (nuevo) ----
 export const register = async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
@@ -47,25 +47,27 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: "Faltan datos" });
     }
 
-    // Verificar si el usuario ya existe
+    // Verificar si ya existe el correo
     const checkUser = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ message: "El usuario ya existe" });
+      return res.status(400).json({ message: "El correo ya está registrado" });
     }
 
     // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insertar en la BD
+    // Guardar en la BD
     const result = await pool.query(
       "INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol",
       [nombre, email, hashedPassword, rol]
     );
 
-    const newUser = result.rows[0];
-    res.status(201).json({ message: "Usuario registrado exitosamente", user: newUser });
+    res.status(201).json({
+      message: "Usuario registrado correctamente ✅",
+      user: result.rows[0],
+    });
   } catch (error) {
     console.error("❌ Error en register:", error.message);
-    res.status(500).json({ message: "Error en el servidor" });
+    res.status(500).json({ message: "Error al registrar usuario" });
   }
 };
