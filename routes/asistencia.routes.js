@@ -1,14 +1,16 @@
+// routes/asistencia.routes.js
 import express from "express";
 import pool from "../db/db.js";
 
 const router = express.Router();
 
+// 📌 Marcar entrada/salida
 router.post("/marcar", async (req, res) => {
   try {
     const { qr, ubicacion } = req.body;
     if (!qr) return res.status(400).json({ mensaje: "QR inválido" });
 
-    // Buscar usuario por QR (puede ser email o id codificado en QR)
+    // Buscar usuario por QR (puede ser id o email)
     const usuario = await pool.query(
       "SELECT * FROM usuarios WHERE id::text = $1 OR email = $1",
       [qr]
@@ -45,7 +47,7 @@ router.post("/marcar", async (req, res) => {
       return res.json({ mensaje: "Ya registraste entrada y salida hoy." });
     }
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error en asistencia:", err.message);
     res.status(500).json({ mensaje: "Error en el servidor" });
   }
 });
