@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "./routes/auth.routes.js";
-import asistenciaRoutes from "./routes/asistencia.routes.js";  // 👈 importa asistencia
-import qrRoutes from "./routes/qr.routes.js";                  // 👈 importa QR
-import pool from "./db/db.js"; // Configuración de PostgreSQL
+import authRoutes from "./routes/auth.routes.js";        // ✅ corregido
+import asistenciaRoutes from "./routes/asistencia.routes.js";  // ✅ corregido
+import qrRoutes from "./routes/qr.routes.js";            // ✅ corregido
+import pool from "./db/db.js"; // ✅ corregido
 
 dotenv.config();
 
@@ -33,8 +33,8 @@ app.use(express.json());
 
 // 📌 Rutas principales
 app.use("/api/auth", authRoutes);
-app.use("/api/asistencia", asistenciaRoutes); // 👈 monta asistencia
-app.use("/api/qr", qrRoutes);                 // 👈 monta QR
+app.use("/api/asistencia", asistenciaRoutes);
+app.use("/api/qr", qrRoutes);
 
 // Ruta base
 app.get("/", (req, res) => {
