@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 
-const password = "admin123"; // tu contraseña de prueba
+// aqui realizamos la encripatcion del texto plano
+const password = "admin123"; 
 const saltRounds = 10;
 
 bcrypt.hash(password, saltRounds).then(hash => {
