@@ -1,27 +1,27 @@
-// auth.controller.js
+// auth.controllers.js
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-// ---- LOGIN (ya lo tienes) ----
+// ---- LOGIN ----
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Faltan datos" });
+      return res.status(400).json({ mensaje: "Faltan datos" });
     }
 
     const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
     if (result.rows.length === 0) {
-      return res.status(401).json({ message: "Usuario no encontrado" });
+      return res.status(401).json({ mensaje: "Usuario no encontrado" });
     }
 
     const user = result.rows[0];
-
     const validPassword = await bcrypt.compare(password, user.password);
+
     if (!validPassword) {
-      return res.status(401).json({ message: "Contraseña incorrecta" });
+      return res.status(401).json({ mensaje: "Contraseña incorrecta" });
     }
 
     const token = jwt.sign(
@@ -30,27 +30,31 @@ export const login = async (req, res) => {
       { expiresIn: "1h" }
     );
 
-    res.json({ token, user: { id: user.id, email: user.email, rol: user.rol } });
+    res.json({
+      mensaje: "Login exitoso ✅",
+      token,
+      user: { id: user.id, email: user.email, rol: user.rol },
+    });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error en el servidor" });
+    console.error("❌ Error en login:", error.message);
+    res.status(500).json({ mensaje: "Error en el servidor" });
   }
 };
 
-// ---- REGISTER (nuevo) ----
+// ---- REGISTER ----
 export const register = async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
 
     if (!nombre || !email || !password || !rol) {
-      return res.status(400).json({ message: "Faltan datos" });
+      return res.status(400).json({ mensaje: "Faltan datos" });
     }
 
     // Verificar si ya existe el correo
     const checkUser = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ message: "El correo ya está registrado" });
+      return res.status(400).json({ mensaje: "El correo ya está registrado" });
     }
 
     // Encriptar contraseña
@@ -63,11 +67,12 @@ export const register = async (req, res) => {
     );
 
     res.status(201).json({
-      message: "Usuario registrado correctamente ✅",
+      mensaje: "Usuario registrado correctamente ✅",
       user: result.rows[0],
     });
+
   } catch (error) {
     console.error("❌ Error en register:", error.message);
-    res.status(500).json({ message: "Error al registrar usuario" });
+    res.status(500).json({ mensaje: "Error al registrar usuario" });
   }
 };
