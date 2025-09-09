@@ -1,22 +1,22 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "./routes/auth.routes.js";   // Incluye login, registro y asistencia
-import qrRoutes from "./routes/qr.routes.js";       // Rutas QR
-import pool from "./db/db.js";                      // Conexión PostgreSQL
+import authRoutes from "./routes/auth.routes.js";   // login, register, users, asistencia
+import qrRoutes from "./routes/qr.routes.js";       // manejo de QR
+import pool from "./db/db.js";                      // conexión PostgreSQL
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// --- Middleware CORS ---
+// --- Middleware CORS: permitir frontend en Netlify y localhost ---
 app.use(
   cors({
     origin: [
-      "http://localhost:5173",       // Vite (frontend local)
-      "http://localhost:3000",       // CRA u otros
-      "https://sig-imn.netlify.app", // Producción (Netlify)
+      "http://localhost:5173",       // Vite local
+      "http://localhost:3000",       // React CRA local
+      "https://sig-imn.netlify.app", // Frontend en producción Netlify
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -24,22 +24,22 @@ app.use(
   })
 );
 
-// --- Preflight ---
+// --- Preflight para todos los requests ---
 app.options("*", cors());
 
-// --- Middleware para JSON ---
+// --- Middleware para parsear JSON ---
 app.use(express.json());
 
 // --- Rutas principales ---
 app.use("/api/auth", authRoutes);  // login, register, users, asistencia
-app.use("/api/qr", qrRoutes);      // manejo de QR
+app.use("/api/qr", qrRoutes);      // QR
 
 // --- Ruta base ---
 app.get("/", (req, res) => {
   res.send("🚀 Backend corriendo en Render!");
 });
 
-// --- Test conexión BD ---
+// --- Endpoint de prueba de base de datos ---
 app.get("/api/test-db", async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
@@ -50,7 +50,7 @@ app.get("/api/test-db", async (req, res) => {
   }
 });
 
-// --- Verificar conexión al iniciar ---
+// --- Verificar conexión a la base de datos al iniciar ---
 (async () => {
   try {
     await pool.query("SELECT 1");
