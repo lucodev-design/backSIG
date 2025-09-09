@@ -1,7 +1,7 @@
-// auth.controllers.js
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import QRCode from "qrcode"; // 👈 librería para generar QR
 
 // ---- LOGIN ----
 export const login = async (req, res) => {
@@ -35,7 +35,6 @@ export const login = async (req, res) => {
       token,
       user: { id: user.id, email: user.email, rol: user.rol },
     });
-
   } catch (error) {
     console.error("❌ Error en login:", error.message);
     res.status(500).json({ mensaje: "Error en el servidor" });
@@ -66,11 +65,17 @@ export const register = async (req, res) => {
       [nombre, email, hashedPassword, rol]
     );
 
+    const newUser = result.rows[0];
+
+    // ✅ Generar código QR con ID y Email
+    const qrData = JSON.stringify({ id: newUser.id, email: newUser.email });
+    const qrCode = await QRCode.toDataURL(qrData);
+
     res.status(201).json({
       mensaje: "Usuario registrado correctamente ✅",
-      user: result.rows[0],
+      user: newUser,
+      qrCode, // 👈 enviamos el QR al frontend
     });
-
   } catch (error) {
     console.error("❌ Error en register:", error.message);
     res.status(500).json({ mensaje: "Error al registrar usuario" });
@@ -83,7 +88,6 @@ export const getUsers = async (req, res) => {
     const result = await pool.query(
       "SELECT id, nombre, email, rol, created_at FROM usuarios ORDER BY id ASC"
     );
-
     res.json(result.rows);
   } catch (error) {
     console.error("❌ Error al obtener usuarios:", error.message);
