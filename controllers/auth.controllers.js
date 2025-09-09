@@ -36,7 +36,6 @@ export const login = async (req, res) => {
       token,
       user: { id: user.id, email: user.email, rol: user.rol },
     });
-
   } catch (error) {
     console.error("❌ Error en login:", error.message);
     res.status(500).json({ message: "Error en el servidor" });
@@ -61,7 +60,7 @@ export const register = async (req, res) => {
     // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear código único para QR (ej: USR-123456)
+    // Crear código único para QR
     const codigoQR = `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     // Guardar en la BD
@@ -78,9 +77,8 @@ export const register = async (req, res) => {
     res.status(201).json({
       message: "Usuario registrado correctamente ✅",
       user,
-      qrImage, // base64 que puedes mostrar o descargar en el front
+      qrImage,
     });
-
   } catch (error) {
     console.error("❌ Error en register:", error.message);
     res.status(500).json({ message: "Error al registrar usuario" });
@@ -98,5 +96,60 @@ export const getUsers = async (req, res) => {
   } catch (error) {
     console.error("❌ Error al obtener usuarios:", error.message);
     res.status(500).json({ message: "Error al obtener usuarios" });
+  }
+};
+
+// ---- MARCAR ASISTENCIA ----
+export const marcarAsistencia = async (req, res) => {
+  try {
+    const { qr, ubicacion } = req.body;
+    if (!qr) return res.status(400).json({ mensaje: "QR inválido" });
+
+    // Buscar usuario por codigo_qr
+    const usuario = await pool.query(
+      "SELECT * FROM usuarios WHERE codigo_qr = $1",
+      [qr]
+    );
+
+    if (usuario.rows.length === 0) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+    }
+
+    const user = usuario.rows[0];
+    const idUsuario = user.id;
+    const hoy = new Date().toISOString().split("T")[0];
+
+    // Verificar si ya existe registro de hoy
+    const registro = await pool.query(
+      "SELECT * FROM asistencia WHERE usuario_id=$1 AND fecha=$2",
+      [idUsuario, hoy]
+    );
+
+    if (registro.rows.length === 0) {
+      // Registrar ENTRADA
+      await pool.query(
+        "INSERT INTO asistencia (usuario_id, fecha, hora_entrada, ubicacion) VALUES ($1, $2, NOW(), $3)",
+        [idUsuario, hoy, ubicacion]
+      );
+      return res.json({
+        mensaje: `Entrada registrada ✅ para ${user.nombre}`,
+        usuario: { id: user.id, nombre: user.nombre, email: user.email },
+      });
+    } else if (!registro.rows[0].hora_salida) {
+      // Registrar SALIDA
+      await pool.query(
+        "UPDATE asistencia SET hora_salida=NOW(), ubicacion=$1 WHERE id=$2",
+        [ubicacion, registro.rows[0].id]
+      );
+      return res.json({
+        mensaje: `Salida registrada ✅ para ${user.nombre}`,
+        usuario: { id: user.id, nombre: user.nombre, email: user.email },
+      });
+    } else {
+      return res.json({ mensaje: "Ya registraste entrada y salida hoy." });
+    }
+  } catch (err) {
+    console.error("❌ Error en asistencia:", err.message);
+    res.status(500).json({ mensaje: "Error en el servidor" });
   }
 };
