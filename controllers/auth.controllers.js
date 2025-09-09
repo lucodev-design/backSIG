@@ -76,3 +76,17 @@ export const register = async (req, res) => {
     res.status(500).json({ mensaje: "Error al registrar usuario" });
   }
 };
+
+// ---- LISTAR USUARIOS ----
+export const getUsers = async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, nombre, email, rol, created_at FROM usuarios ORDER BY id ASC"
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error al obtener usuarios:", error.message);
+    res.status(500).json({ mensaje: "Error al obtener usuarios" });
+  }
+};
