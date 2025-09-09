@@ -1,7 +1,8 @@
+// controllers/auth.controllers.js
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import QRCode from "qrcode"; // 👈 librería para generar QR
+import QRCode from "qrcode";
 
 // ---- LOGIN ----
 export const login = async (req, res) => {
@@ -9,19 +10,19 @@ export const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ mensaje: "Faltan datos" });
+      return res.status(400).json({ message: "Faltan datos" });
     }
 
     const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
     if (result.rows.length === 0) {
-      return res.status(401).json({ mensaje: "Usuario no encontrado" });
+      return res.status(401).json({ message: "Usuario no encontrado" });
     }
 
     const user = result.rows[0];
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
-      return res.status(401).json({ mensaje: "Contraseña incorrecta" });
+      return res.status(401).json({ message: "Contraseña incorrecta" });
     }
 
     const token = jwt.sign(
@@ -31,13 +32,14 @@ export const login = async (req, res) => {
     );
 
     res.json({
-      mensaje: "Login exitoso ✅",
+      message: "Login exitoso ✅",
       token,
       user: { id: user.id, email: user.email, rol: user.rol },
     });
+
   } catch (error) {
     console.error("❌ Error en login:", error.message);
-    res.status(500).json({ mensaje: "Error en el servidor" });
+    res.status(500).json({ message: "Error en el servidor" });
   }
 };
 
@@ -47,38 +49,41 @@ export const register = async (req, res) => {
     const { nombre, email, password, rol } = req.body;
 
     if (!nombre || !email || !password || !rol) {
-      return res.status(400).json({ mensaje: "Faltan datos" });
+      return res.status(400).json({ message: "Faltan datos" });
     }
 
     // Verificar si ya existe el correo
     const checkUser = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ mensaje: "El correo ya está registrado" });
+      return res.status(400).json({ message: "El correo ya está registrado" });
     }
 
     // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Crear código único para QR (ej: USR-123456)
+    const codigoQR = `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
     // Guardar en la BD
     const result = await pool.query(
-      "INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol",
-      [nombre, email, hashedPassword, rol]
+      "INSERT INTO usuarios (nombre, email, password, rol, codigo_qr) VALUES ($1, $2, $3, $4, $5) RETURNING id, nombre, email, rol, codigo_qr",
+      [nombre, email, hashedPassword, rol, codigoQR]
     );
 
-    const newUser = result.rows[0];
+    const user = result.rows[0];
 
-    // ✅ Generar código QR con ID y Email
-    const qrData = JSON.stringify({ id: newUser.id, email: newUser.email });
-    const qrCode = await QRCode.toDataURL(qrData);
+    // Generar QR en base64
+    const qrImage = await QRCode.toDataURL(codigoQR);
 
     res.status(201).json({
-      mensaje: "Usuario registrado correctamente ✅",
-      user: newUser,
-      qrCode, // 👈 enviamos el QR al frontend
+      message: "Usuario registrado correctamente ✅",
+      user,
+      qrImage, // base64 que puedes mostrar o descargar en el front
     });
+
   } catch (error) {
     console.error("❌ Error en register:", error.message);
-    res.status(500).json({ mensaje: "Error al registrar usuario" });
+    res.status(500).json({ message: "Error al registrar usuario" });
   }
 };
 
@@ -86,11 +91,12 @@ export const register = async (req, res) => {
 export const getUsers = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, nombre, email, rol, created_at FROM usuarios ORDER BY id ASC"
+      "SELECT id, nombre, email, rol, codigo_qr, created_at FROM usuarios ORDER BY id ASC"
     );
+
     res.json(result.rows);
   } catch (error) {
     console.error("❌ Error al obtener usuarios:", error.message);
-    res.status(500).json({ mensaje: "Error al obtener usuarios" });
+    res.status(500).json({ message: "Error al obtener usuarios" });
   }
 };
