@@ -1,5 +1,6 @@
 import express from "express";
-import { login, register, getUsers, marcarAsistencia } from "../controllers/auth.controllers.js";
+import { login, register, getUsers, marcarAsistencia, deleteUser } from "../controllers/auth.controllers.js";
+import { verifyAdmin } from "../middlewares/auth.middleware"
 
 const router = express.Router();
 
@@ -10,5 +11,8 @@ router.get("/users", getUsers);
 
 // Asistencia (QR)
 router.post("/asistencia/marcar", marcarAsistencia);
+
+// Ruta par eliminar a un usuario
+router.delete("/user/:id", verifyAdmin, deleteUser)
 
 export default router;

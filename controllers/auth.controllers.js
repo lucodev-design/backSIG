@@ -42,7 +42,7 @@ export const login = async (req, res) => {
   }
 };
 
-// ---- REGISTER ----
+// ---- REGISTAR UDUARIO/TRABAJADOR ----
 export const register = async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
@@ -79,13 +79,20 @@ export const register = async (req, res) => {
   }
 };
 
-// ---- LISTAR USUARIOS ----
+/// ---- LISTAR USUARIOS CON QR ----
 export const getUsers = async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT id, nombre, email, rol, codigo_qr, created_at FROM usuarios ORDER BY id ASC"
     );
-    return res.json(result.rows);
+
+    // Generar imagen QR para cada usuario
+    const usersWithQR = await Promise.all(result.rows.map(async (u) => {
+      const qrImage = await QRCode.toDataURL(u.codigo_qr);
+      return { ...u, qrImage }; // agregamos la imagen base64
+    }));
+
+    return res.json(usersWithQR);
   } catch (error) {
     console.error("❌ Error al obtener usuarios:", error);
     return res.status(500).json({ message: "Error al obtener usuarios" });
@@ -150,5 +157,24 @@ export const marcarAsistencia = async (req, res) => {
   } catch (error) {
     console.error("❌ Error en asistencia:", error);
     return res.status(500).json({ mensaje: "Error en el servidor" });
+  }
+};
+// ELIMINAR UN USUARIO/TRABAJADOR
+export const deleteUser = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Verificar si el usuario existe
+    const user = await pool.query("SELECT * FROM usuarios WHERE id = $1", [id]);
+    if (user.rows.length === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // Eliminar usuario
+    await pool.query("DELETE FROM usuarios WHERE id = $1", [id]);
+    return res.json({ message: "Usuario eliminado correctamente ✅" });
+  } catch (error) {
+    console.error("❌ Error al eliminar usuario:", error);
+    return res.status(500).json({ message: "Error al eliminar usuario" });
   }
 };
