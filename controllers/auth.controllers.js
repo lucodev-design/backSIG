@@ -45,7 +45,7 @@ export const login = async (req, res) => {
 // ---- REGISTAR UDUARIO/TRABAJADOR ----
 export const register = async (req, res) => {
   try {
-    const { nombre, email, password, rol } = req.body;
+    const { nombre, email, password, rol } = req.body;    
 
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: "Faltan datos" });
@@ -86,10 +86,16 @@ export const getUsers = async (req, res) => {
       "SELECT id, nombre, email, rol, codigo_qr, created_at FROM usuarios ORDER BY id ASC"
     );
 
-    // Generar imagen QR para cada usuario
     const usersWithQR = await Promise.all(result.rows.map(async (u) => {
-      const qrImage = await QRCode.toDataURL(u.codigo_qr);
-      return { ...u, qrImage }; // agregamos la imagen base64
+      let qrImage = "";
+      try {
+        if (u.codigo_qr) {
+          qrImage = await QRCode.toDataURL(u.codigo_qr);
+        }
+      } catch (err) {
+        console.error(`Error generando QR para usuario ${u.id}:`, err);
+      }
+      return { ...u, qrImage };
     }));
 
     return res.json(usersWithQR);
