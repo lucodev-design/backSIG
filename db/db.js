@@ -1,3 +1,4 @@
+// db.js
 import pkg from "pg";
 import dotenv from "dotenv";
 
@@ -7,14 +8,16 @@ const { Pool } = pkg;
 let pool;
 
 if (process.env.DATABASE_URL) {
-  // 🌐 Render o producción
+  // 🌐 Producción en Neon
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }, // necesario en Render
+    ssl: {
+      rejectUnauthorized: false, // necesario para Neon
+    },
   });
-  console.log("✅ Usando conexión a Render (DATABASE_URL)");
+  console.log("✅ Conectado a Neon (producción)");
 } else {
-  // 🖥️ Local
+  // 🖥️ Desarrollo local
   pool = new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
@@ -22,7 +25,7 @@ if (process.env.DATABASE_URL) {
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
   });
-  console.log("✅ Usando conexión local (variables .env)");
+  console.log("✅ Conectado a base de datos local");
 }
 
 export default pool;
