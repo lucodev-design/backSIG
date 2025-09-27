@@ -1,186 +1,223 @@
-// controllers/auth.controllers.js
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import QRCode from "qrcode";
 
-// ---- LOGIN ----
-export const login = async (req, res) => {
+// ---------------- REGISTRO USUARIO ----------------
+export const registerUser = async (req, res) => {
+  try {
+    const { nombre, apellidos, dni, email, password, rol_id, sede_id } = req.body;
+
+    if (!nombre || !apellidos || !dni || !email || !password || !rol_id || !sede_id) {
+      return res.status(400).json({ success: false, message: "Faltan datos" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const query = `
+      INSERT INTO usuarios (nombre, apellidos, dni, email, password, rol_id, sede_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id_usuario, nombre, email
+    `;
+    const values = [nombre, apellidos, dni, email, hashedPassword, rol_id, sede_id];
+
+    const { rows } = await pool.query(query, values);
+
+    res.json({ success: true, user: rows[0] });
+  } catch (err) {
+    console.error("Error en registerUser:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
+  }
+};
+
+// ---------------- CREAR ROL ----------------
+export const createRol = async (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ success: false, message: "Falta nombre del rol" });
+
+    const { rows } = await pool.query(
+      "INSERT INTO roles (nombre) VALUES ($1) RETURNING id_rol, nombre",
+      [nombre]
+    );
+
+    res.json({ success: true, rol: rows[0] });
+  } catch (err) {
+    console.error("Error en createRol:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
+  }
+};
+
+// ---------------- LISTAR ROLES ----------------
+export const getRoles = async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT id_rol, nombre FROM roles ORDER BY id_rol");
+    // devolvemos un array simple (útil para selects en el frontend)
+    res.json(rows);
+  } catch (err) {
+    console.error("Error en getRoles:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
+  }
+};
+
+// ---------------- CREAR SEDE ----------------
+export const createSede = async (req, res) => {
+  try {
+    const { nombre, direccion } = req.body;
+    if (!nombre || !direccion)
+      return res.status(400).json({ success: false, message: "Faltan datos" });
+
+    const { rows } = await pool.query(
+      "INSERT INTO sedes (nombre, direccion) VALUES ($1, $2) RETURNING id_sede, nombre, direccion",
+      [nombre, direccion]
+    );
+
+    res.json({ success: true, sede: rows[0] });
+  } catch (err) {
+    console.error("Error en createSede:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
+  }
+};
+
+// ---------------- LISTAR SEDES ----------------
+export const getSedes = async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT id_sede, nombre, direccion FROM sedes ORDER BY id_sede");
+    res.json(rows);
+  } catch (err) {
+    console.error("Error en getSedes:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
+  }
+};
+
+// ---------------- LOGIN USUARIO ----------------
+export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Faltan datos" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Faltan credenciales" });
     }
 
-    const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: "Usuario no encontrado" });
+    // Buscar usuario por correo
+    const query = `SELECT * FROM usuarios WHERE email = $1`;
+    const { rows } = await pool.query(query, [email]);
+
+    if (rows.length === 0) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Usuario no encontrado" });
     }
 
-    const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password);
+    const user = rows[0];
 
-    if (!validPassword) {
-      return res.status(401).json({ message: "Contraseña incorrecta" });
+    // Comparar contraseñas
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Contraseña incorrecta" });
     }
 
+    // Crear token JWT
     const token = jwt.sign(
-      { id: user.id, rol: user.rol },
-      process.env.JWT_SECRET || "secreto123",
-      { expiresIn: "1h" }
+      {
+        id: user.id, // 👈 cambia si tu PK es id_usuario
+        email: user.email,
+        rol_id: user.rol_id,
+        sede_id: user.sede_id,
+      },
+      process.env.JWT_SECRET || "secretkey",
+      { expiresIn: "2h" }
     );
 
-    return res.json({
-      message: "Login exitoso ✅",
+    // Responder
+    res.json({
+      success: true,
+      message: "Login exitoso",
       token,
-      user: { id: user.id, email: user.email, rol: user.rol },
+      user: {
+        id: user.id, // o user.id_usuario
+        nombre: user.nombre,
+        apellidos: user.apellidos,
+        email: user.email,
+        rol_id: user.rol_id,
+        sede_id: user.sede_id,
+      },
     });
-  } catch (error) {
-    console.error("❌ Error en login:", error);
-    return res.status(500).json({ message: "Error en el servidor" });
+  } catch (err) {
+    console.error("Error en loginUser:", err);
+    res.status(500).json({ success: false, message: "Error en el servidor" });
   }
 };
 
-// ---- REGISTAR UDUARIO/TRABAJADOR ----
-export const register = async (req, res) => {
-  try {
-    const { nombre, email, password, rol } = req.body;    
 
-    if (!nombre || !email || !password || !rol) {
-      return res.status(400).json({ message: "Faltan datos" });
-    }
-
-    // Verificar si ya existe el correo
-    const checkUser = await pool.query("SELECT 1 FROM usuarios WHERE email = $1", [email]);
-    if (checkUser.rows.length > 0) {
-      return res.status(400).json({ message: "El correo ya está registrado" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const codigoQR = `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    const result = await pool.query(
-      "INSERT INTO usuarios (nombre, email, password, rol, codigo_qr) VALUES ($1, $2, $3, $4, $5) RETURNING id, nombre, email, rol, codigo_qr",
-      [nombre, email, hashedPassword, rol, codigoQR]
-    );
-
-    const user = result.rows[0];
-    const qrImage = await QRCode.toDataURL(codigoQR);
-
-    return res.status(201).json({
-      message: "Usuario registrado correctamente ✅",
-      user,
-      qrImage,
-    });
-  } catch (error) {
-    console.error("❌ Error en register:", error);
-    return res.status(500).json({ message: "Error al registrar usuario" });
-  }
-};
-
-/// ---- LISTAR USUARIOS CON QR ----
+// ---------------- GET USERS ----------------
 export const getUsers = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, nombre, email, rol, codigo_qr, created_at FROM usuarios ORDER BY id ASC"
+      `SELECT u.id_usuario, u.nombre, u.apellidos, u.dni, u.email, 
+              r.nombre AS rol, s.nombre AS sede, u.qr_code
+       FROM usuarios u
+       JOIN roles r ON u.rol_id = r.id_rol
+       JOIN sedes s ON u.sede_id = s.id_sede
+       ORDER BY u.id_usuario ASC`
     );
 
-    const usersWithQR = await Promise.all(result.rows.map(async (u) => {
-      let qrImage = "";
-      try {
-        if (u.codigo_qr) {
-          qrImage = await QRCode.toDataURL(u.codigo_qr);
-        }
-      } catch (err) {
-        console.error(`Error generando QR para usuario ${u.id}:`, err);
-      }
-      return { ...u, qrImage };
-    }));
-
-    return res.json(usersWithQR);
+    res.json(result.rows);
   } catch (error) {
-    console.error("❌ Error al obtener usuarios:", error);
-    return res.status(500).json({ message: "Error al obtener usuarios" });
+    console.error("❌ Error en getUsers:", error);
+    res.status(500).json({ message: "Error al obtener usuarios" });
   }
 };
 
-// ---- MARCAR ASISTENCIA ----
-export const marcarAsistencia = async (req, res) => {
-  try {
-    const { qr, ubicacion } = req.body;
+// Eliminar usuario
 
-    if (!qr) {
-      return res.status(400).json({ mensaje: "QR inválido" });
-    }
-
-    const usuarioResult = await pool.query(
-      "SELECT * FROM usuarios WHERE codigo_qr = $1",
-      [qr]
-    );
-
-    if (usuarioResult.rows.length === 0) {
-      return res.status(404).json({ mensaje: "Usuario no encontrado" });
-    }
-
-    const user = usuarioResult.rows[0];
-    const idUsuario = user.id;
-    const hoy = new Date().toISOString().split("T")[0];
-
-    // Revisar registro existente
-    const registroResult = await pool.query(
-      "SELECT * FROM asistencia WHERE usuario_id = $1 AND fecha = $2",
-      [idUsuario, hoy]
-    );
-
-    if (registroResult.rows.length === 0) {
-      // Registrar ENTRADA
-      await pool.query(
-        "INSERT INTO asistencia (usuario_id, fecha, hora_entrada, ubicacion) VALUES ($1, $2, NOW(), $3)",
-        [idUsuario, hoy, ubicacion]
-      );
-      return res.json({
-        mensaje: `Entrada registrada ✅ para ${user.nombre}`,
-        usuario: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol },
-      });
-    }
-
-    const registro = registroResult.rows[0];
-
-    if (!registro.hora_salida) {
-      // Registrar SALIDA
-      await pool.query(
-        "UPDATE asistencia SET hora_salida = NOW(), ubicacion = $1 WHERE id = $2",
-        [ubicacion, registro.id]
-      );
-      return res.json({
-        mensaje: `Salida registrada ✅ para ${user.nombre}`,
-        usuario: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol },
-      });
-    }
-
-    return res.json({ mensaje: "Ya registraste entrada y salida hoy." });
-  } catch (error) {
-    console.error("❌ Error en asistencia:", error);
-    return res.status(500).json({ mensaje: "Error en el servidor" });
-  }
-};
-// ELIMINAR UN USUARIO/TRABAJADOR
 export const deleteUser = async (req, res) => {
-  const { id } = req.params;
-
   try {
-    // Verificar si el usuario existe
-    const user = await pool.query("SELECT * FROM usuarios WHERE id = $1", [id]);
-    if (user.rows.length === 0) {
+    const { id } = req.params; // viene de la URL /users/:id
+
+    // Eliminamos el usuario
+    const result = await pool.query(
+      "DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *",
+      [id]
+    );
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    // Eliminar usuario
-    await pool.query("DELETE FROM usuarios WHERE id = $1", [id]);
-    return res.json({ message: "Usuario eliminado correctamente ✅" });
-  } catch (error) {
-    console.error("❌ Error al eliminar usuario:", error);
-    return res.status(500).json({ message: "Error al eliminar usuario" });
+    // Respuesta con el usuario eliminado
+    res.json({
+      message: "✅ Usuario eliminado correctamente",
+      usuario: result.rows[0],
+    });
+  } catch (err) {
+    console.error("❌ Error al eliminar usuario:", err.message);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+// Actualizar usuario
+export const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params; // viene de la URL /users/:id
+    const { nombre, apellidos, dni, email, rol_id, sede_id } = req.body;
+
+    const result = await pool.query(
+      `UPDATE usuarios 
+       SET nombre = $1, apellidos = $2, dni = $3, email = $4, rol_id = $5, sede_id = $6 
+       WHERE id_usuario = $7 RETURNING *`,
+      [nombre, apellidos, dni, email, rol_id, sede_id, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.json({ message: "Usuario actualizado correctamente", usuario: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Error al actualizar usuario:", err);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 };

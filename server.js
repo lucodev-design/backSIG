@@ -67,6 +67,17 @@ app.get("/api/test-db", async (req, res) => {
   }
 })();
 
+// --- Middleware global de manejo de errores ---
+app.use((err, req, res, next) => {
+  console.error("🔥 Error detectado:", err.stack);  // lo verás en tu terminal
+  res.status(500).json({
+    success: false,
+    message: "Error interno del servidor",
+    error: err.message, // opcional: quitar en producción si no quieres mostrar detalle
+  });
+});
+
+
 // --- Iniciar servidor ---
 app.listen(PORT, () => {
   console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
