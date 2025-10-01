@@ -1,16 +1,7 @@
 // routes/auth.routes.js
 import { Router } from "express";
-import {
-  registerUser,
-  createRol,
-  createSede,
-  getRoles,
-  getSedes,
-  loginUser,
-  getUsers, 
-  updateUser,
-  deleteUser
-} from "../controllers/auth.controllers.js";
+import {  registerUser,  createRol,  createSede,  getRoles,  getSedes,  loginUser,
+  getUsers,   updateUser,  deleteUser,  marcarAsistencia} from "../controllers/auth.controllers.js";
 
 const router = Router();
 
@@ -36,6 +27,10 @@ router.get("/users", getUsers);
 // === EDITAR Y ELIMINAR USUARIO ===
 router.put("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);
+
+// === Asistencia ===
+router.post("/asistencia/marcar", marcarAsistencia);
+// router.get("/asistencias", getAsistencias);
 
 
 export default router;
