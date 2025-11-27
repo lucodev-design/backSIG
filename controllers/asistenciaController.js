@@ -1,6 +1,6 @@
 // backend/controllers/asistenciaController.js
 import pool from "../db/db.js";
-import moment from "moment-timezone"; // ✅ Importar moment-timezone
+import moment from "moment-timezone";
 
 // ---------------------------------------------
 // 🧭 Funciones auxiliares para CÁLCULO DE MINUTOS
@@ -8,48 +8,86 @@ import moment from "moment-timezone"; // ✅ Importar moment-timezone
 
 /**
  * Calcula el estado de la entrada y los minutos de retraso fuera de la tolerancia.
+ * @param {Date} horaActual - Hora actual como objeto Date
+ * @param {string} horaEntradaConfig - Hora configurada (formato "HH:mm")
+ * @param {number} toleranciaMinutos - Minutos de tolerancia
  * @returns {object} { estado: string, minutosDescuento: number }
  */
 const calcularMinutosRetrasoEntrada = (horaActual, horaEntradaConfig, toleranciaMinutos) => {
+  // ✅ Convertir horaActual a moment con zona horaria de Lima
+  const momentActual = moment(horaActual).tz("America/Lima");
+  
+  // ✅ Crear la hora configurada usando la fecha actual de Lima
   const [hConfig, mConfig] = horaEntradaConfig.split(":").map(Number);
-  const dateConfig = new Date();
-  dateConfig.setHours(hConfig, mConfig, 0, 0);
+  const momentConfig = moment.tz("America/Lima")
+    .hours(hConfig)
+    .minutes(mConfig)
+    .seconds(0)
+    .milliseconds(0);
 
-  const limiteTolerancia = new Date(dateConfig.getTime() + toleranciaMinutos * 60000);
+  // ✅ Calcular límite de tolerancia
+  const momentLimiteTolerancia = momentConfig.clone().add(toleranciaMinutos, 'minutes');
 
-  if (horaActual <= dateConfig) {
+  console.log("🕐 Hora actual:", momentActual.format("HH:mm:ss"));
+  console.log("🕐 Hora entrada config:", momentConfig.format("HH:mm:ss"));
+  console.log("🕐 Límite tolerancia:", momentLimiteTolerancia.format("HH:mm:ss"));
+
+  // ✅ Comparaciones con moment
+  if (momentActual.isSameOrBefore(momentConfig)) {
     return { estado: "A Tiempo", minutosDescuento: 0 };
   }
-  if (horaActual <= limiteTolerancia) {
+  
+  if (momentActual.isSameOrBefore(momentLimiteTolerancia)) {
     return { estado: "Tolerancia", minutosDescuento: 0 };
   }
 
-  const diffMs = horaActual.getTime() - limiteTolerancia.getTime();
-  const minutosRetraso = Math.ceil(diffMs / 60000); 
+  // ✅ Calcular minutos de retraso
+  const minutosRetraso = Math.ceil(momentActual.diff(momentLimiteTolerancia, 'minutes', true));
+
+  console.log(`⏱️ Minutos de retraso: ${minutosRetraso}`);
 
   return { estado: "Tarde/Descuento", minutosDescuento: minutosRetraso };
 };
 
 /**
  * Calcula el estado de la salida y los minutos de adelanto fuera de la tolerancia.
+ * @param {Date} horaActual - Hora actual como objeto Date
+ * @param {string} horaSalidaConfig - Hora configurada (formato "HH:mm")
+ * @param {number} toleranciaMinutos - Minutos de tolerancia
  * @returns {object} { estado: string, minutosDescuento: number }
  */
 const calcularMinutosAdelantoSalida = (horaActual, horaSalidaConfig, toleranciaMinutos) => {
+  // ✅ Convertir horaActual a moment con zona horaria de Lima
+  const momentActual = moment(horaActual).tz("America/Lima");
+  
+  // ✅ Crear la hora configurada usando la fecha actual de Lima
   const [hConfig, mConfig] = horaSalidaConfig.split(":").map(Number);
-  const dateConfig = new Date();
-  dateConfig.setHours(hConfig, mConfig, 0, 0);
+  const momentConfig = moment.tz("America/Lima")
+    .hours(hConfig)
+    .minutes(mConfig)
+    .seconds(0)
+    .milliseconds(0);
 
-  const limiteTolerancia = new Date(dateConfig.getTime() - toleranciaMinutos * 60000);
+  // ✅ Calcular límite de tolerancia (antes de la hora de salida)
+  const momentLimiteTolerancia = momentConfig.clone().subtract(toleranciaMinutos, 'minutes');
 
-  if (horaActual >= dateConfig) {
+  console.log("🕐 Hora actual:", momentActual.format("HH:mm:ss"));
+  console.log("🕐 Hora salida config:", momentConfig.format("HH:mm:ss"));
+  console.log("🕐 Límite tolerancia:", momentLimiteTolerancia.format("HH:mm:ss"));
+
+  // ✅ Comparaciones con moment
+  if (momentActual.isSameOrAfter(momentConfig)) {
     return { estado: "Salida Normal", minutosDescuento: 0 };
   }
-  if (horaActual >= limiteTolerancia) {
+  
+  if (momentActual.isSameOrAfter(momentLimiteTolerancia)) {
     return { estado: "Salida Tolerada", minutosDescuento: 0 };
   }
 
-  const diffMs = limiteTolerancia.getTime() - horaActual.getTime();
-  const minutosAdelanto = Math.ceil(diffMs / 60000); 
+  // ✅ Calcular minutos de adelanto
+  const minutosAdelanto = Math.ceil(momentLimiteTolerancia.diff(momentActual, 'minutes', true));
+
+  console.log(`⏱️ Minutos de adelanto: ${minutosAdelanto}`);
 
   return { estado: "Salida Temprana/Descuento", minutosDescuento: minutosAdelanto };
 };
@@ -57,7 +95,6 @@ const calcularMinutosAdelantoSalida = (horaActual, horaSalidaConfig, toleranciaM
 // ---------------------------------------------
 // 🔑 Función principal: marcarAsistencia
 // ---------------------------------------------
-// backend/controllers/asistenciaController.js
 export const marcarAsistencia = async (req, res) => {
   try {
     const { qr_code, turno } = req.body;
@@ -125,15 +162,11 @@ export const marcarAsistencia = async (req, res) => {
 
     console.log("🔍 Turno asignado del usuario:", turnoAsignadoNormalizado);
 
-    // 3️⃣ ✅ DETERMINAR SI ES TIEMPO COMPLETO
+    // 3️⃣ DETERMINAR SI ES TIEMPO COMPLETO
     const esTiempoCompleto = turnoAsignadoNormalizado.includes('completo') || 
                              turnoAsignadoNormalizado.includes('tiempo');
 
     console.log("⏰ ¿Es tiempo completo?", esTiempoCompleto);
-
-    // ✅ NO VALIDAMOS el turno del QR contra el turno asignado
-    // El usuario puede marcar en cualquier momento del día
-    // Los horarios para calcular descuentos se basan en SU turno asignado
 
     // 4️⃣ Obtener configuración global CON horarios de turnos
     const configResult = await pool.query(
@@ -161,7 +194,7 @@ export const marcarAsistencia = async (req, res) => {
     const toleranciaMinutos = parseInt(config.tolerancia_min || 5);
     const costoPorMinuto = parseFloat(config.descuento_min || 0);
 
-    // 5️⃣ ✅ DETERMINAR HORARIOS SEGÚN EL TURNO ASIGNADO DEL USUARIO
+    // 5️⃣ DETERMINAR HORARIOS SEGÚN EL TURNO ASIGNADO DEL USUARIO
     let horaEntradaTurno, horaSalidaTurno;
 
     if (esTiempoCompleto) {
@@ -184,12 +217,13 @@ export const marcarAsistencia = async (req, res) => {
 
     console.log(`📋 Turno: ${turnoAsignado} | Entrada: ${horaEntradaTurno} | Salida: ${horaSalidaTurno}`);
 
-    // ✅ USAR ZONA HORARIA DE LIMA
-    const fechaActual = moment().tz("America/Lima").format("YYYY-MM-DD");
-    const horaActual = moment().tz("America/Lima").toDate();
+    // ✅ OBTENER FECHA Y HORA ACTUAL DE LIMA
+    const momentLima = moment().tz("America/Lima");
+    const fechaActual = momentLima.format("YYYY-MM-DD");
+    const horaActual = momentLima.toDate();
 
     console.log("📅 Fecha actual (Lima):", fechaActual);
-    console.log("⏰ Hora actual (Lima):", moment(horaActual).format("HH:mm:ss"));
+    console.log("⏰ Hora actual (Lima):", momentLima.format("YYYY-MM-DD HH:mm:ss"));
 
     // 6️⃣ Verificar asistencia existente
     const asistenciaResult = await pool.query(
@@ -289,8 +323,6 @@ export const marcarAsistencia = async (req, res) => {
     });
   }
 };
-
-// Las otras funciones quedan igual...
 
 // ----------- LISTAR LA ASISTENCIA DE CADA TRABAJADOR ------------------
 export const getAsistenciaByUser = async (req, res) => {
