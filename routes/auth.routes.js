@@ -1,36 +1,44 @@
 // routes/auth.routes.js
 import { Router } from "express";
-import {  registerUser,  createRol,  createSede,  getRoles,  getSedes,  loginUser,
-  getUsers,   updateUser,  deleteUser,  marcarAsistencia} from "../controllers/auth.controllers.js";
+import {  createSede,   getSedes, updateSede, deleteSede,  loginUser, 
+  updateConfig,
+  getFeriados,
+  addFeriado,
+  deleteFeriado,
+  updateConfiguracionGlobal,
+} from "../controllers/auth.controllers.js";
+
 
 const router = Router();
 
-// Para la Gestion de usuarios
-// ROLES
-router.get("/roles", getRoles);
+
+
 // SEDES
+router.post("/sedes", createSede);  // crear nueva sede
 router.get("/sedes", getSedes );
+router.put("/sedes/:id_sede", updateSede);
+router.delete("/sedes/:id_sede", deleteSede);
 
 // ====== rutas para la fase de insersion de registros de prueba ======
-// --- Usuarios ---
-router.post("/register", registerUser);
-// --- Roles y Sedes ---
-router.post("/roles", createRol);   // crear nuevo rol
-router.post("/sedes", createSede);  // crear nueva sede
 
 // ==== LOGIN ====
 router.post("/login", loginUser);
 
-// === LISTAR USUARIOS ===
-router.get("/users", getUsers);
 
-// === EDITAR Y ELIMINAR USUARIO ===
-router.put("/users/:id", updateUser);
-router.delete("/users/:id", deleteUser);
+// ==== ADMIN NORMAL ======
 
-// === Asistencia ===
-router.post("/asistencia/marcar", marcarAsistencia);
-// router.get("/asistencias", getAsistencias);
+// router.get("/global", getConfig);
+router.put("/globalUpdate", updateConfig);
+
+
+router.get("/config/feriados", getFeriados);
+router.post("/config/feriados", addFeriado);
+router.delete("/config/feriados/:id", deleteFeriado);
+
+// CONFIGURACIÓN GLOBAL
+// router.get("/configuracion", getConfiguracionGlobal);
+router.put("/configuracion", updateConfiguracionGlobal);
+
 
 
 export default router;

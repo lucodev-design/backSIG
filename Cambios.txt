@@ -1,0 +1,21 @@
+
+• Se definio el controlador separado para el registerUserControll.js, junto con sus 
+respectivas rutas (regidterUser.reoutes.js)
+
+• 
+
+
+
+=======================================
+Se ajusto 
+    • Modulo de Crear Nuevo administradores, Listar a lo nuevos administradores, 
+    tambin dentro del modulo de Gestion de sedes y de roles 
+
+Se creo:
+    • Modulo de gestion de sedes y de roles
+    • Modulo de creacion de nuevos administradores(Formulario )y el modulo de Listar a lo nuevos
+    administradores creados.
+
+Cambios Pendientes
+    • Cambiar la apariencia dentro de lo que es roles, cambiar el diseño al igual 
+    que el modulos de sedes (FALTA)
