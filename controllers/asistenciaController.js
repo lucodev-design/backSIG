@@ -57,6 +57,7 @@ const calcularMinutosAdelantoSalida = (horaActual, horaSalidaConfig, toleranciaM
 // ---------------------------------------------
 // 🔑 Función principal: marcarAsistencia
 // ---------------------------------------------
+// backend/controllers/asistenciaController.js
 export const marcarAsistencia = async (req, res) => {
   try {
     const { qr_code, turno } = req.body;
@@ -120,36 +121,19 @@ export const marcarAsistencia = async (req, res) => {
     }
 
     // Normalizar nombres de turnos para comparación
-    const turnoQRNormalizado = turno.toLowerCase().trim();
     const turnoAsignadoNormalizado = turnoAsignado.toLowerCase().trim();
 
-    console.log("🔍 Comparando turnos:", {
-      turnoQR: turnoQRNormalizado,
-      turnoAsignado: turnoAsignadoNormalizado
-    });
+    console.log("🔍 Turno asignado del usuario:", turnoAsignadoNormalizado);
 
-    // 3️⃣ Validar coincidencia de turno (excepto para Tiempo Completo)
+    // 3️⃣ ✅ DETERMINAR SI ES TIEMPO COMPLETO
     const esTiempoCompleto = turnoAsignadoNormalizado.includes('completo') || 
-                             turnoAsignadoNormalizado.includes('tiempo completo') ||
-                             turnoAsignadoNormalizado === 'tiempo completo';
+                             turnoAsignadoNormalizado.includes('tiempo');
 
     console.log("⏰ ¿Es tiempo completo?", esTiempoCompleto);
 
-    if (!esTiempoCompleto) {
-      if (turnoQRNormalizado !== turnoAsignadoNormalizado) {
-        return res.status(403).json({
-          success: false,
-          message: `❌ Turno incorrecto. Este QR es para turno "${turno}", pero tu turno asignado es "${turnoAsignado}".`,
-          usuario: {
-            nombre: nombreUsuario,
-            apellidos: apellidosUsuario,
-            dni: dniUsuario,
-            turno: turnoAsignado,
-            estado: "Turno no coincide"
-          }
-        });
-      }
-    }
+    // ✅ NO VALIDAMOS el turno del QR contra el turno asignado
+    // El usuario puede marcar en cualquier momento del día
+    // Los horarios para calcular descuentos se basan en SU turno asignado
 
     // 4️⃣ Obtener configuración global CON horarios de turnos
     const configResult = await pool.query(
@@ -177,7 +161,7 @@ export const marcarAsistencia = async (req, res) => {
     const toleranciaMinutos = parseInt(config.tolerancia_min || 5);
     const costoPorMinuto = parseFloat(config.descuento_min || 0);
 
-    // 5️⃣ DETERMINAR HORARIOS SEGÚN EL TURNO ASIGNADO
+    // 5️⃣ ✅ DETERMINAR HORARIOS SEGÚN EL TURNO ASIGNADO DEL USUARIO
     let horaEntradaTurno, horaSalidaTurno;
 
     if (esTiempoCompleto) {
@@ -305,6 +289,8 @@ export const marcarAsistencia = async (req, res) => {
     });
   }
 };
+
+// Las otras funciones quedan igual...
 
 // ----------- LISTAR LA ASISTENCIA DE CADA TRABAJADOR ------------------
 export const getAsistenciaByUser = async (req, res) => {
