@@ -19,6 +19,12 @@ import authSuperAdminRoutes from "./routes/authSuperAdmin.routes.js";
 
 // Configuracion global de horario
 import Cglobal from "./routes/confiGlobal.routes.js";
+
+// Reportes User
+import reportesUser from "./routes/reportesUser.routes.js";
+
+
+
 dotenv.config();
 
 const app = express();
@@ -70,9 +76,10 @@ app.use("/api/super/reportes",reportesRouter);
 app.use("/api/superadmin",authSuperAdminRoutes )
 
 // Modulo de configuarcion global
-app.use ("/api/Cglobal",Cglobal);
+app.use("/api/Cglobal",Cglobal);
 
-
+// Modulo para la gestion de reportes por el panel el admin
+app.use("/api/reportes",reportesUser);
 
 
 // --- Ruta base ---
