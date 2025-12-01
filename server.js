@@ -23,7 +23,8 @@ import Cglobal from "./routes/confiGlobal.routes.js";
 // Reportes User
 import reportesUser from "./routes/reportesUser.routes.js";
 
-
+// reportes Generales del Super Admin
+import reportesGeneralesRoutes from "./routes/reportesGenerales.routes.js";
 
 dotenv.config();
 
@@ -80,6 +81,11 @@ app.use("/api/Cglobal",Cglobal);
 
 // Modulo para la gestion de reportes por el panel el admin
 app.use("/api/reportes",reportesUser);
+
+// Primer 
+app.use("/api/reportes", reportesGeneralesRoutes);
+
+
 
 
 // --- Ruta base ---
