@@ -26,6 +26,13 @@ import reportesUser from "./routes/reportesUser.routes.js";
 // reportes Generales del Super Admin
 import reportesGeneralesRoutes from "./routes/reportesGenerales.routes.js";
 
+// Importacion de los envios de mensajes de usuarios a admins (Soporte)
+import soporteRoutes from "./routes/shipments/soporte.routes.js";
+
+
+
+
+
 dotenv.config();
 
 const app = express();
@@ -85,6 +92,8 @@ app.use("/api/reportes",reportesUser);
 // Primer 
 app.use("/api/reportes", reportesGeneralesRoutes);
 
+// Soporte de usuarios
+app.use("/api", soporteRoutes);
 
 
 
