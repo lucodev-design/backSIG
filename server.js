@@ -4,16 +4,21 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
 import qrRoutes from "./routes/qr.routes.js";
 import pool from "./db/db.js";
+
 // Integramos los controladores y rutas de turnos al servidor
 import turnosRoutes from "./routes/turnos.routes.js";
 import asistenciasroutes from "./routes/asistencias.routes.js"
 import registerUser from "./routes/registroUser.routes.js"
+
 // Roles
 import roles from "./routes/roles.routes.js";
+
 // modulo de solo admin dentro del panel del Super Admin
 import adminRoutes from "./routes/admin.routes.js";
+
 // Para el modulo de reportes generales (panel super admin)
 import reportesRouter from "./routes/reportes.routes.js";
+
 // Para el login de admins y super admins
 import authSuperAdminRoutes from "./routes/authSuperAdmin.routes.js";
 
