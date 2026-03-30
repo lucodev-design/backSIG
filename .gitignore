@@ -5,3 +5,4 @@ testdb.js
 
 #
 node_modules
+.env
