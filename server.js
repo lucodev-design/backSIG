@@ -34,7 +34,8 @@ import reportesGeneralesRoutes from "./routes/reportesGenerales.routes.js";
 // Importacion de los envios de mensajes de usuarios a admins (Soporte)
 import soporteRoutes from "./routes/shipments/soporte.routes.js";
 
-
+// Reportes SA
+import usuariosSedeRoutes from "./routes/usuariosSede.routes.js";
 
 
 
@@ -95,7 +96,11 @@ app.use("/api/Cglobal",Cglobal);
 app.use("/api/reportes",reportesUser);
 
 // Primer 
-app.use("/api/reportes", reportesGeneralesRoutes);
+// app.use("/api/reportes", reportesGeneralesRoutes);
+app.use("/api/reportes-generales", reportesGeneralesRoutes);
+// app.use("/api/usuarios", usuariosSederoutesImport);
+
+app.use("/api/usuarios", usuariosSedeRoutes);
 
 // Soporte de usuarios
 app.use("/api", soporteRoutes);

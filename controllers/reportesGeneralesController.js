@@ -10,9 +10,6 @@ import { toZonedTime } from "date-fns-tz";
 
 const TIMEZONE_PERU = "America/Lima";
 
-// ====================================
-// HELPER: Obtener fecha en hora de Perú
-// ====================================
 const getFechaPeruFormateada = () => {
   const now = new Date();
   const zonedDate = toZonedTime(now, TIMEZONE_PERU);
@@ -20,64 +17,127 @@ const getFechaPeruFormateada = () => {
 };
 
 // ====================================
-// REPORTE CONSOLIDADO (TODAS LAS SEDES)
+// HELPER: Condición de período para WHERE
+// ====================================
+const buildPeriodoWhere = (
+  periodo,
+  mes,
+  anio,
+  quincena,
+  fechaInicio,
+  fechaFin,
+  campoFecha,
+  paramOffset,
+) => {
+  let whereExtra = "";
+  const params = [];
+  let idx = paramOffset;
+
+  if (periodo === "personalizado") {
+    whereExtra = `AND ${campoFecha} BETWEEN $${idx++} AND $${idx++}`;
+    params.push(fechaInicio, fechaFin);
+  } else if (periodo === "quincenal") {
+    const diaInicio = quincena === "1" ? 1 : 16;
+    const diaFin =
+      quincena === "1" ? 15 : new Date(Number(anio), Number(mes), 0).getDate();
+    whereExtra = `
+      AND EXTRACT(MONTH FROM ${campoFecha}) = $${idx++}
+      AND EXTRACT(YEAR  FROM ${campoFecha}) = $${idx++}
+      AND EXTRACT(DAY   FROM ${campoFecha}) BETWEEN $${idx++} AND $${idx++}`;
+    params.push(mes, anio, diaInicio, diaFin);
+  } else {
+    whereExtra = `
+      AND EXTRACT(MONTH FROM ${campoFecha}) = $${idx++}
+      AND EXTRACT(YEAR  FROM ${campoFecha}) = $${idx++}`;
+    params.push(mes, anio);
+  }
+
+  return { whereExtra, params };
+};
+
+// ====================================
+// HELPER: Estadísticas globales
+// ====================================
+const calcularEstadisticas = (
+  rows,
+  campoPresente,
+  campoTardanza,
+  campoFalta,
+) => {
+  const total_asistencias = rows.reduce(
+    (s, r) => s + (parseInt(r[campoPresente]) || 0),
+    0,
+  );
+  const total_tardanzas = rows.reduce(
+    (s, r) => s + (parseInt(r[campoTardanza]) || 0),
+    0,
+  );
+  const total_faltas = rows.reduce(
+    (s, r) => s + (parseInt(r[campoFalta]) || 0),
+    0,
+  );
+  const total = total_asistencias + total_tardanzas + total_faltas;
+  const porcentaje_asistencia =
+    total > 0 ? ((total_asistencias / total) * 100).toFixed(2) : "0.00";
+  return {
+    total_asistencias,
+    total_tardanzas,
+    total_faltas,
+    porcentaje_asistencia,
+  };
+};
+
+// ====================================
+// REPORTE CONSOLIDADO
 // ====================================
 export const generarReporteConsolidado = async (req, res) => {
   try {
     const { mes, anio, periodo, quincena, fechaInicio, fechaFin } = req.query;
 
-    let whereClause = "";
-    let params = [];
-
-    if (periodo === "personalizado") {
-      whereClause = "WHERE a.fecha BETWEEN $1 AND $2";
-      params = [fechaInicio, fechaFin];
-    } else if (periodo === "quincenal") {
-      const diaInicio = quincena === "1" ? 1 : 16;
-      const diaFin = quincena === "1" ? 15 : new Date(anio, mes, 0).getDate();
-      whereClause = `WHERE EXTRACT(MONTH FROM a.fecha) = $1 
-                     AND EXTRACT(YEAR FROM a.fecha) = $2 
-                     AND EXTRACT(DAY FROM a.fecha) BETWEEN $3 AND $4`;
-      params = [mes, anio, diaInicio, diaFin];
-    } else {
-      whereClause = `WHERE EXTRACT(MONTH FROM a.fecha) = $1 
-                     AND EXTRACT(YEAR FROM a.fecha) = $2`;
-      params = [mes, anio];
-    }
+    const { whereExtra, params } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "fecha",
+      1,
+    );
 
     const query = `
-      SELECT 
-        s.nombre AS sede,
-        COUNT(DISTINCT u.id_usuario) AS total_trabajadores,
-        COUNT(CASE WHEN a.estado = 'Presente' THEN 1 END) AS asistencias,
-        COUNT(CASE WHEN a.estado = 'Tardanza' THEN 1 END) AS tardanzas,
-        COUNT(CASE WHEN a.estado = 'Falta' THEN 1 END) AS faltas,
+      SELECT
+        s.nombre                                                      AS sede,
+        COUNT(DISTINCT u.id_usuario)                                  AS total_trabajadores,
+        -- ✅ Conteo real por estado
+        COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END)         AS asistencias,
+        COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END)         AS tardanzas,
+        COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END)         AS faltas,
+        -- ✅ Porcentaje solo sobre registros reales de asistencia
         ROUND(
-          (COUNT(CASE WHEN a.estado = 'Presente' THEN 1 END) * 100.0 / 
-          NULLIF(COUNT(*), 0)), 
-          2
-        ) AS porcentaje_asistencia
-      FROM asistencias a
-      INNER JOIN usuarios u ON a.id_usuario = u.id_usuario
-      INNER JOIN sedes s ON u.sede_id = s.id_sede
-      ${whereClause}
-      GROUP BY s.nombre
+          COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) * 100.0
+          / NULLIF(
+              COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END),
+            0), 2
+        )                                                             AS porcentaje_asistencia
+      FROM sedes s
+      LEFT JOIN usuarios u ON u.sede_id = s.id_sede
+      LEFT JOIN (
+        SELECT * FROM asistencia WHERE 1=1 ${whereExtra}
+      ) asis ON asis.usuario_id = u.id_usuario
+      GROUP BY s.id_sede, s.nombre
       ORDER BY s.nombre
     `;
 
     const result = await pool.query(query, params);
-
-    // Calcular estadísticas globales
-    const estadisticas = {
-      total_asistencias: result.rows.reduce((sum, r) => sum + parseInt(r.asistencias), 0),
-      total_tardanzas: result.rows.reduce((sum, r) => sum + parseInt(r.tardanzas), 0),
-      total_faltas: result.rows.reduce((sum, r) => sum + parseInt(r.faltas), 0),
-    };
-
-    const total = estadisticas.total_asistencias + estadisticas.total_tardanzas + estadisticas.total_faltas;
-    estadisticas.porcentaje_asistencia = total > 0 
-      ? ((estadisticas.total_asistencias / total) * 100).toFixed(2) 
-      : 0;
+    const estadisticas = calcularEstadisticas(
+      result.rows,
+      "asistencias",
+      "tardanzas",
+      "faltas",
+    );
 
     res.json({
       reporte: result.rows,
@@ -86,77 +146,72 @@ export const generarReporteConsolidado = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en generarReporteConsolidado:", error);
-    res.status(500).json({ 
-      message: "Error al generar reporte consolidado",
-      error: error.message 
-    });
+    res
+      .status(500)
+      .json({
+        message: "Error al generar reporte consolidado",
+        error: error.message,
+      });
   }
 };
 
 // ====================================
-// REPORTE POR SEDE ESPECÍFICA
+// REPORTE POR SEDE
 // ====================================
 export const generarReportePorSede = async (req, res) => {
   try {
-    const { mes, anio, periodo, quincena, fechaInicio, fechaFin, sedeId } = req.query;
+    const { mes, anio, periodo, quincena, fechaInicio, fechaFin, sedeId } =
+      req.query;
 
-    if (!sedeId) {
-      return res.status(400).json({ message: "Se requiere el ID de la sede" });
-    }
+    if (!sedeId)
+      return res.status(400).json({ message: "Se requiere el ID de la sede." });
 
-    let whereClause = "WHERE u.sede_id = $1";
-    let params = [sedeId];
-
-    if (periodo === "personalizado") {
-      whereClause += " AND a.fecha BETWEEN $2 AND $3";
-      params.push(fechaInicio, fechaFin);
-    } else if (periodo === "quincenal") {
-      const diaInicio = quincena === "1" ? 1 : 16;
-      const diaFin = quincena === "1" ? 15 : new Date(anio, mes, 0).getDate();
-      whereClause += ` AND EXTRACT(MONTH FROM a.fecha) = $2 
-                       AND EXTRACT(YEAR FROM a.fecha) = $3 
-                       AND EXTRACT(DAY FROM a.fecha) BETWEEN $4 AND $5`;
-      params.push(mes, anio, diaInicio, diaFin);
-    } else {
-      whereClause += ` AND EXTRACT(MONTH FROM a.fecha) = $2 
-                       AND EXTRACT(YEAR FROM a.fecha) = $3`;
-      params.push(mes, anio);
-    }
+    const { whereExtra, params: periodoParams } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "fecha",
+      2,
+    );
+    const params = [sedeId, ...periodoParams];
 
     const query = `
-      SELECT 
-        u.nombre || ' ' || u.apellidos AS trabajador,
+      SELECT
+        u.nombre || ' ' || u.apellidos                                AS trabajador,
         u.dni,
-        r.nombre AS rol,
-        COUNT(CASE WHEN a.estado = 'Presente' THEN 1 END) AS dias_presente,
-        COUNT(CASE WHEN a.estado = 'Tardanza' THEN 1 END) AS dias_tardanza,
-        COUNT(CASE WHEN a.estado = 'Falta' THEN 1 END) AS dias_falta,
+        r.nombre                                                      AS rol,
+        COUNT(CASE WHEN asis.estado = 'Presente'  THEN 1 END)        AS dias_presente,
+        COUNT(CASE WHEN asis.estado = 'Tardanza'  THEN 1 END)        AS dias_tardanza,
+        COUNT(CASE WHEN asis.estado = 'Falta'     THEN 1 END)        AS dias_falta,
+        -- ✅ Porcentaje solo sobre registros reales
         ROUND(
-          (COUNT(CASE WHEN a.estado = 'Presente' THEN 1 END) * 100.0 / 
-          NULLIF(COUNT(*), 0)), 
-          2
-        ) AS porcentaje_asistencia
+          COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) * 100.0
+          / NULLIF(
+              COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END),
+            0), 2
+        )                                                             AS porcentaje_asistencia
       FROM usuarios u
       INNER JOIN roles r ON u.rol_id = r.id_rol
-      LEFT JOIN asistencias a ON u.id_usuario = a.id_usuario
-      ${whereClause}
+      LEFT JOIN (
+        SELECT * FROM asistencia WHERE 1=1 ${whereExtra}
+      ) asis ON asis.usuario_id = u.id_usuario
+      WHERE u.sede_id = $1
       GROUP BY u.id_usuario, u.nombre, u.apellidos, u.dni, r.nombre
       ORDER BY trabajador
     `;
 
     const result = await pool.query(query, params);
-
-    // Calcular estadísticas
-    const estadisticas = {
-      total_asistencias: result.rows.reduce((sum, r) => sum + parseInt(r.dias_presente), 0),
-      total_tardanzas: result.rows.reduce((sum, r) => sum + parseInt(r.dias_tardanza), 0),
-      total_faltas: result.rows.reduce((sum, r) => sum + parseInt(r.dias_falta), 0),
-    };
-
-    const total = estadisticas.total_asistencias + estadisticas.total_tardanzas + estadisticas.total_faltas;
-    estadisticas.porcentaje_asistencia = total > 0 
-      ? ((estadisticas.total_asistencias / total) * 100).toFixed(2) 
-      : 0;
+    const estadisticas = calcularEstadisticas(
+      result.rows,
+      "dias_presente",
+      "dias_tardanza",
+      "dias_falta",
+    );
 
     res.json({
       reporte: result.rows,
@@ -165,10 +220,12 @@ export const generarReportePorSede = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en generarReportePorSede:", error);
-    res.status(500).json({ 
-      message: "Error al generar reporte por sede",
-      error: error.message 
-    });
+    res
+      .status(500)
+      .json({
+        message: "Error al generar reporte por sede",
+        error: error.message,
+      });
   }
 };
 
@@ -177,56 +234,57 @@ export const generarReportePorSede = async (req, res) => {
 // ====================================
 export const generarReportePorTrabajador = async (req, res) => {
   try {
-    const { mes, anio, periodo, quincena, fechaInicio, fechaFin, usuarioId } = req.query;
+    const { mes, anio, periodo, quincena, fechaInicio, fechaFin, usuarioId } =
+      req.query;
 
-    if (!usuarioId) {
-      return res.status(400).json({ message: "Se requiere el ID del usuario" });
-    }
+    if (!usuarioId)
+      return res
+        .status(400)
+        .json({ message: "Se requiere el ID del usuario." });
 
-    let whereClause = "WHERE a.id_usuario = $1";
-    let params = [usuarioId];
-
-    if (periodo === "personalizado") {
-      whereClause += " AND a.fecha BETWEEN $2 AND $3";
-      params.push(fechaInicio, fechaFin);
-    } else if (periodo === "quincenal") {
-      const diaInicio = quincena === "1" ? 1 : 16;
-      const diaFin = quincena === "1" ? 15 : new Date(anio, mes, 0).getDate();
-      whereClause += ` AND EXTRACT(MONTH FROM a.fecha) = $2 
-                       AND EXTRACT(YEAR FROM a.fecha) = $3 
-                       AND EXTRACT(DAY FROM a.fecha) BETWEEN $4 AND $5`;
-      params.push(mes, anio, diaInicio, diaFin);
-    } else {
-      whereClause += ` AND EXTRACT(MONTH FROM a.fecha) = $2 
-                       AND EXTRACT(YEAR FROM a.fecha) = $3`;
-      params.push(mes, anio);
-    }
+    const { whereExtra, params: periodoParams } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "a.fecha",
+      2,
+    );
+    const params = [usuarioId, ...periodoParams];
 
     const query = `
-      SELECT 
-        TO_CHAR(a.fecha, 'DD/MM/YYYY') AS fecha,
+      SELECT
+        TO_CHAR(a.fecha,        'DD/MM/YYYY') AS fecha,
         a.estado,
         TO_CHAR(a.hora_entrada, 'HH24:MI:SS') AS hora_entrada,
-        TO_CHAR(a.hora_salida, 'HH24:MI:SS') AS hora_salida,
-        a.observaciones
-      FROM asistencias a
-      ${whereClause}
+        TO_CHAR(a.hora_salida,  'HH24:MI:SS') AS hora_salida
+      FROM asistencia a
+      WHERE a.usuario_id = $1
+        ${whereExtra}
       ORDER BY a.fecha DESC
     `;
 
     const result = await pool.query(query, params);
 
-    // Calcular estadísticas
-    const estadisticas = {
-      total_asistencias: result.rows.filter(r => r.estado === 'Presente').length,
-      total_tardanzas: result.rows.filter(r => r.estado === 'Tardanza').length,
-      total_faltas: result.rows.filter(r => r.estado === 'Falta').length,
-    };
+    // ✅ Conteo correcto directo desde las filas retornadas
+    const total_asistencias = result.rows.filter(
+      (r) => r.estado === "Presente",
+    ).length;
+    const total_tardanzas = result.rows.filter(
+      (r) => r.estado === "Tardanza",
+    ).length;
+    const total_faltas = result.rows.filter((r) => r.estado === "Falta").length;
+    const total = total_asistencias + total_tardanzas + total_faltas;
 
-    const total = result.rows.length;
-    estadisticas.porcentaje_asistencia = total > 0 
-      ? ((estadisticas.total_asistencias / total) * 100).toFixed(2) 
-      : 0;
+    const estadisticas = {
+      total_asistencias,
+      total_tardanzas,
+      total_faltas,
+      porcentaje_asistencia:
+        total > 0 ? ((total_asistencias / total) * 100).toFixed(2) : "0.00",
+    };
 
     res.json({
       reporte: result.rows,
@@ -235,11 +293,117 @@ export const generarReportePorTrabajador = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en generarReportePorTrabajador:", error);
-    res.status(500).json({ 
-      message: "Error al generar reporte por trabajador",
-      error: error.message 
-    });
+    res
+      .status(500)
+      .json({
+        message: "Error al generar reporte por trabajador",
+        error: error.message,
+      });
   }
+};
+
+// ====================================
+// HELPER INTERNO: Re-consultar DB para exportación
+// ====================================
+const obtenerDatosParaExportacion = async (
+  tipoReporte,
+  { mes, anio, periodo, quincena, fechaInicio, fechaFin, sedeId, usuarioId },
+) => {
+  let query, params;
+
+  if (tipoReporte === "consolidado") {
+    const { whereExtra, params: p } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "fecha",
+      1,
+    );
+    query = `
+      SELECT
+        s.nombre AS sede,
+        COUNT(DISTINCT u.id_usuario) AS total_trabajadores,
+        COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) AS asistencias,
+        COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) AS tardanzas,
+        COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END) AS faltas,
+        ROUND(
+          COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) * 100.0
+          / NULLIF(
+              COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END),
+            0), 2
+        ) AS porcentaje_asistencia
+      FROM sedes s
+      LEFT JOIN usuarios u ON u.sede_id = s.id_sede
+      LEFT JOIN (SELECT * FROM asistencia WHERE 1=1 ${whereExtra}) asis ON asis.usuario_id = u.id_usuario
+      GROUP BY s.id_sede, s.nombre ORDER BY s.nombre
+    `;
+    params = p;
+  } else if (tipoReporte === "sede") {
+    const { whereExtra, params: pp } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "fecha",
+      2,
+    );
+    query = `
+      SELECT
+        u.nombre||' '||u.apellidos AS trabajador,
+        u.dni,
+        r.nombre AS rol,
+        COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) AS dias_presente,
+        COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) AS dias_tardanza,
+        COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END) AS dias_falta,
+        ROUND(
+          COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) * 100.0
+          / NULLIF(
+              COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) +
+              COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END),
+            0), 2
+        ) AS porcentaje_asistencia
+      FROM usuarios u
+      INNER JOIN roles r ON u.rol_id = r.id_rol
+      LEFT JOIN (SELECT * FROM asistencia WHERE 1=1 ${whereExtra}) asis ON asis.usuario_id = u.id_usuario
+      WHERE u.sede_id = $1
+      GROUP BY u.id_usuario, u.nombre, u.apellidos, u.dni, r.nombre ORDER BY trabajador
+    `;
+    params = [sedeId, ...pp];
+  } else {
+    // ✅ Sin a.observaciones — columna no existe en la tabla
+    const { whereExtra, params: pp } = buildPeriodoWhere(
+      periodo,
+      mes,
+      anio,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      "a.fecha",
+      2,
+    );
+    query = `
+      SELECT
+        TO_CHAR(a.fecha,        'DD/MM/YYYY') AS fecha,
+        a.estado,
+        TO_CHAR(a.hora_entrada, 'HH24:MI:SS') AS hora_entrada,
+        TO_CHAR(a.hora_salida,  'HH24:MI:SS') AS hora_salida
+      FROM asistencia a
+      WHERE a.usuario_id = $1 ${whereExtra}
+      ORDER BY a.fecha DESC
+    `;
+    params = [usuarioId, ...pp];
+  }
+
+  const result = await pool.query(query, params);
+  return result.rows;
 };
 
 // ====================================
@@ -247,53 +411,89 @@ export const generarReportePorTrabajador = async (req, res) => {
 // ====================================
 export const exportarReporteExcel = async (req, res) => {
   try {
-    const { tipoReporte, datos } = req.body;
+    const {
+      tipoReporte,
+      mes,
+      anio,
+      periodo,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      sedeId,
+      usuarioId,
+    } = req.body;
+
+    const datos = await obtenerDatosParaExportacion(tipoReporte, {
+      mes,
+      anio,
+      periodo,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      sedeId,
+      usuarioId,
+    });
+
+    if (datos.length === 0)
+      return res.status(404).json({ message: "No hay datos para exportar." });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Reporte");
 
-    // Configurar columnas según los datos
-    if (datos.length > 0) {
-      worksheet.columns = Object.keys(datos[0]).map(key => ({
-        header: key.toUpperCase().replace(/_/g, " "),
-        key: key,
-        width: 20
-      }));
+    worksheet.columns = Object.keys(datos[0]).map((key) => ({
+      header: key.replace(/_/g, " ").toUpperCase(),
+      key,
+      width: 22,
+    }));
 
-      // Agregar filas
-      worksheet.addRows(datos);
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF0070C0" },
+    };
+    headerRow.alignment = { horizontal: "center", vertical: "middle" };
+    headerRow.height = 20;
 
-      // Estilo del encabezado
-      worksheet.getRow(1).font = { bold: true };
-      worksheet.getRow(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0070C0' }
-      };
+    datos.forEach((row) => {
+      worksheet.addRow(row).alignment = { vertical: "middle" };
+    });
 
-      // Agregar fecha de generación
-      worksheet.addRow([]);
-      worksheet.addRow([`Generado: ${getFechaPeruFormateada()}`]);
+    const totalRows = datos.length + 1;
+    const totalCols = worksheet.columns.length;
+    for (let r = 1; r <= totalRows; r++) {
+      for (let c = 1; c <= totalCols; c++) {
+        worksheet.getCell(r, c).border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      }
     }
 
-    // Enviar archivo
+    worksheet.addRow([]);
+    worksheet.addRow([`Generado: ${getFechaPeruFormateada()}`]).font = {
+      italic: true,
+      color: { argb: "FF666666" },
+    };
+
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=reporte_${Date.now()}.xlsx`
+      `attachment; filename=reporte_${Date.now()}.xlsx`,
     );
-
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
     console.error("Error en exportarReporteExcel:", error);
-    res.status(500).json({ 
-      message: "Error al exportar a Excel",
-      error: error.message 
-    });
+    res
+      .status(500)
+      .json({ message: "Error al exportar a Excel", error: error.message });
   }
 };
 
@@ -302,54 +502,103 @@ export const exportarReporteExcel = async (req, res) => {
 // ====================================
 export const exportarReportePDF = async (req, res) => {
   try {
-    const { tipoReporte, datos } = req.body;
+    const {
+      tipoReporte,
+      mes,
+      anio,
+      periodo,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      sedeId,
+      usuarioId,
+    } = req.body;
 
-    const doc = new PDFDocument({ margin: 50 });
+    const datos = await obtenerDatosParaExportacion(tipoReporte, {
+      mes,
+      anio,
+      periodo,
+      quincena,
+      fechaInicio,
+      fechaFin,
+      sedeId,
+      usuarioId,
+    });
 
+    if (datos.length === 0)
+      return res.status(404).json({ message: "No hay datos para exportar." });
+
+    const doc = new PDFDocument({
+      margin: 40,
+      size: "A4",
+      layout: "landscape",
+    });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=reporte_${Date.now()}.pdf`
+      `attachment; filename=reporte_${Date.now()}.pdf`,
     );
-
     doc.pipe(res);
 
-    // Título
-    doc.fontSize(20).text("Reporte de Asistencias", { align: "center" });
-    doc.moveDown();
-    doc.fontSize(10).text(`Generado: ${getFechaPeruFormateada()}`, { align: "right" });
-    doc.moveDown();
+    doc
+      .fontSize(16)
+      .font("Helvetica-Bold")
+      .text("Reporte de Asistencias", { align: "center" });
+    doc.moveDown(0.3);
+    doc
+      .fontSize(9)
+      .font("Helvetica")
+      .fillColor("#666666")
+      .text(`Generado: ${getFechaPeruFormateada()}`, { align: "right" });
+    doc.fillColor("#000000").moveDown(0.8);
 
-    // Datos en formato tabla simple
-    if (datos.length > 0) {
-      const headers = Object.keys(datos[0]);
-      
-      // Headers
-      doc.fontSize(10).font('Helvetica-Bold');
-      let yPosition = doc.y;
-      headers.forEach((header, i) => {
-        doc.text(header.toUpperCase(), 50 + (i * 100), yPosition, { width: 90 });
-      });
+    const headers = Object.keys(datos[0]);
+    const pageWidth = doc.page.width - 80;
+    const colWidth = Math.floor(pageWidth / headers.length);
+    const cellH = 18;
+    const startX = 40;
+    let curY = doc.y;
 
-      doc.moveDown();
-      doc.font('Helvetica');
-
-      // Filas
-      datos.forEach((row) => {
-        yPosition = doc.y;
-        headers.forEach((header, i) => {
-          doc.text(String(row[header] || '-'), 50 + (i * 100), yPosition, { width: 90 });
+    const drawRow = (values, isBold = false, bgColor = null) => {
+      if (bgColor) doc.rect(startX, curY, pageWidth, cellH).fill(bgColor);
+      doc
+        .font(isBold ? "Helvetica-Bold" : "Helvetica")
+        .fontSize(8)
+        .fillColor(isBold ? "#FFFFFF" : "#000000");
+      values.forEach((val, i) => {
+        doc.text(String(val ?? "—"), startX + i * colWidth + 3, curY + 4, {
+          width: colWidth - 6,
+          ellipsis: true,
+          lineBreak: false,
         });
-        doc.moveDown(0.5);
       });
-    }
+      doc.rect(startX, curY, pageWidth, cellH).strokeColor("#CCCCCC").stroke();
+      doc.fillColor("#000000");
+      curY += cellH;
+      if (curY > doc.page.height - 60) {
+        doc.addPage();
+        curY = 40;
+      }
+    };
+
+    drawRow(
+      headers.map((h) => h.replace(/_/g, " ").toUpperCase()),
+      true,
+      "#0070C0",
+    );
+    datos.forEach((row, idx) => {
+      drawRow(
+        headers.map((h) => row[h]),
+        false,
+        idx % 2 === 0 ? "#F5F8FF" : null,
+      );
+    });
 
     doc.end();
   } catch (error) {
     console.error("Error en exportarReportePDF:", error);
-    res.status(500).json({ 
-      message: "Error al exportar a PDF",
-      error: error.message 
-    });
+    res
+      .status(500)
+      .json({ message: "Error al exportar a PDF", error: error.message });
   }
 };
