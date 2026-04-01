@@ -37,6 +37,12 @@ import soporteRoutes from "./routes/shipments/soporte.routes.js";
 // Reportes SA
 import usuariosSedeRoutes from "./routes/usuariosSede.routes.js";
 
+// Renumeraciones de trabajadores
+import usuariosRoutes from "./routes/usuarios.routes.js";
+
+// Ticktes para la renumeracion de pagos
+import ticketsRoutes from "./routes/tickets.routes.js";
+
 
 
 dotenv.config();
@@ -98,12 +104,23 @@ app.use("/api/reportes",reportesUser);
 // Primer 
 // app.use("/api/reportes", reportesGeneralesRoutes);
 app.use("/api/reportes-generales", reportesGeneralesRoutes);
+
+// Renumeraciones de trabajadores
+app.use("/api", usuariosRoutes);
+
+// Ticktes para la renumeracion
+app.use("/api/tickets",ticketsRoutes);
+
 // app.use("/api/usuarios", usuariosSederoutesImport);
 
 app.use("/api/usuarios", usuariosSedeRoutes);
 
 // Soporte de usuarios
 app.use("/api", soporteRoutes);
+
+
+
+
 
 
 

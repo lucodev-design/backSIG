@@ -103,100 +103,6 @@ export const deleteSede = async (req, res) => {
 };
 
 
-
-// ---------------- LOGIN USUARIO ----------------
-// // ---------------- LOGIN USUARIO ----------------
-// export const loginUser = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     // Validar datos
-//     if (!email || !password) {
-//       console.log("Login fallido: faltan credenciales");
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "Faltan credenciales" });
-//     }
-
-//     // Buscar usuario y su rol
-//     const query = `
-//       SELECT 
-//         u.id_usuario,
-//         u.nombre,
-//         u.apellidos,
-//         u.email,
-//         u.password,
-//         u.rol_id,
-//         r.nombre AS rol,
-//         u.sede_id,
-//         s.nombre AS sede
-//       FROM usuarios u
-//       JOIN roles r ON u.rol_id = r.id_rol
-//       JOIN sedes s ON u.sede_id = s.id_sede
-//       WHERE u.email = $1
-//     `;
-
-//     const { rows } = await pool.query(query, [email]);
-
-//     if (rows.length === 0) {
-//       console.log(`Login fallido: usuario no encontrado (${email})`);
-//       return res
-//         .status(401)
-//         .json({ success: false, message: "Usuario no encontrado" });
-//     }
-
-//     const user = rows[0];
-
-//     // Comparar contraseñas
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     if (!isMatch) {
-//       console.log(`Login fallido: contraseña incorrecta (${email})`);
-//       return res
-//         .status(401)
-//         .json({ success: false, message: "Contraseña incorrecta" });
-//     }
-
-//     // Crear token JWT
-//     const token = jwt.sign(
-//       {
-//         id: user.id_usuario,
-//         email: user.email,
-//         rol: user.rol,    
-//         rol_id: user.rol_id,
-//         sede_id: user.sede_id,
-//       },
-//       process.env.JWT_SECRET || "secretkey",
-//       { expiresIn: "2h" }
-//     );
-
-//     console.log(`Login exitoso: ${user.nombre} (${user.rol})`);
-
-//     // Responder
-//     res.json({
-//       success: true,
-//       message: `Login exitoso. Bienvenido ${user.nombre}`,
-//       token,
-//       user: {
-//         id: user.id_usuario,
-//         nombre: user.nombre,
-//         apellidos: user.apellidos,
-//         email: user.email,
-//         rol_id: user.rol_id,
-//         rol: user.rol,
-//         sede_id: user.sede_id,
-//         sede: user.sede,
-//       },
-//     });
-//   } catch (err) {
-//     // Captura de errores inesperados
-//     console.error("Error inesperado en loginUser:", err);
-//     res
-//       .status(500)
-//       .json({ success: false, message: "Error en el servidor", error: err.message });
-//   }
-// };
-
-// alternativa para usar las tablas de Admins y usuarios para el login
 // ---------------- LOGIN USUARIO / ADMIN ----------------
 export const loginUser = async (req, res) => {
   try {
@@ -276,21 +182,22 @@ export const loginUser = async (req, res) => {
     // 2️⃣ BUSCAR EN TABLA USUARIOS (TRABAJADORES)
     // -------------------------------
     const queryUser = `
-      SELECT 
-        u.id_usuario,
-        u.nombre,
-        u.apellidos,
-        u.email,
-        u.password,
-        u.rol_id,
-        r.nombre AS rol,
-        u.sede_id,
-        s.nombre AS sede
-      FROM usuarios u
-      JOIN roles r ON u.rol_id = r.id_rol
-      JOIN sedes s ON u.sede_id = s.id_sede
-      WHERE u.email = $1
-    `;
+  SELECT 
+    u.id_usuario,
+    u.nombre,
+    u.apellidos,
+    u.email,
+    u.password,
+    u.rol_id,
+    u.remuneracion,        
+    r.nombre AS rol,
+    u.sede_id,
+    s.nombre AS sede
+  FROM usuarios u
+  JOIN roles r ON u.rol_id = r.id_rol
+  JOIN sedes s ON u.sede_id = s.id_sede
+  WHERE u.email = $1
+`;
 
     const userResult = await pool.query(queryUser, [email]);
 
@@ -328,23 +235,23 @@ export const loginUser = async (req, res) => {
 
     // Respuesta para Trabajador (Usuario)
     return res.json({
-      success: true,
-      message: `Bienvenido ${user.nombre}`,
-      token: tokenTrabajador,
-      user: {
-        // 🔥 CORRECCIÓN: Agregar id_usuario explícitamente
-        id_usuario: user.id_usuario, 
-        id: user.id_usuario, // Mantenemos 'id' para consistencia si es necesario
-        nombre: user.nombre,
-        apellidos: user.apellidos,
-        email: user.email,
-        rol: user.rol,
-        rol_id: user.rol_id,
-        sede_id: user.sede_id,
-        sede: user.sede,
-        tipo: "usuario",
-      },
-    });
+  success: true,
+  message: `Bienvenido ${user.nombre}`,
+  token: tokenTrabajador,
+  user: {
+    id_usuario: user.id_usuario,
+    id: user.id_usuario,
+    nombre: user.nombre,
+    apellidos: user.apellidos,
+    email: user.email,
+    rol: user.rol,
+    rol_id: user.rol_id,
+    sede_id: user.sede_id,
+    sede: user.sede,
+    remuneracion: user.remuneracion,  
+    tipo: "usuario",
+  },
+});
 
   } catch (err) {
     console.error("Error en loginUser:", err);

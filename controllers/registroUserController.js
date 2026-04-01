@@ -1,4 +1,3 @@
-
 import pool from "../db/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -7,9 +6,26 @@ import jwt from "jsonwebtoken";
 
 export const registerUser = async (req, res) => {
   try {
-    const { nombre, apellidos, dni, email, password, rol_id, sede_id, turno_id } = req.body;
+    const {
+      nombre,
+      apellidos,
+      dni,
+      email,
+      password,
+      rol_id,
+      sede_id,
+      turno_id,
+    } = req.body;
 
-    if (!nombre || !apellidos || !dni || !email || !password || !rol_id || !sede_id) {
+    if (
+      !nombre ||
+      !apellidos ||
+      !dni ||
+      !email ||
+      !password ||
+      !rol_id ||
+      !sede_id
+    ) {
       return res.status(400).json({ mensaje: "⚠️ Faltan datos obligatorios." });
     }
 
@@ -20,15 +36,28 @@ export const registerUser = async (req, res) => {
     const result = await pool.query(
       `INSERT INTO usuarios (nombre, apellidos, dni, email, password, rol_id, sede_id, turno_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id_usuario`,
-      [nombre, apellidos, dni, email, hashedPassword, rol_id, sede_id, turno_id || null]
+      [
+        nombre,
+        apellidos,
+        dni,
+        email,
+        hashedPassword,
+        rol_id,
+        sede_id,
+        turno_id || null,
+      ],
     );
 
     const id_usuario = result.rows[0]?.id_usuario;
-    if (!id_usuario) throw new Error("No se pudo obtener el ID del usuario recién creado.");
+    if (!id_usuario)
+      throw new Error("No se pudo obtener el ID del usuario recién creado.");
 
     // Generar y guardar el código QR (en este caso el ID)
     const qrCode = id_usuario.toString();
-    await pool.query("UPDATE usuarios SET qr_code = $1 WHERE id_usuario = $2", [qrCode, id_usuario]);
+    await pool.query("UPDATE usuarios SET qr_code = $1 WHERE id_usuario = $2", [
+      qrCode,
+      id_usuario,
+    ]);
 
     console.log(`✅ Usuario registrado con ID ${id_usuario}`);
 
@@ -49,25 +78,27 @@ export const registerUser = async (req, res) => {
 // ---------------- GET USERS ----------------
 export const getUsers = async (req, res) => {
   try {
+    // registroUserController.js — función getUsers
     const result = await pool.query(
       `SELECT 
-        u.id_usuario, 
-        u.nombre, 
-        u.apellidos, 
-        u.dni, 
-        u.email, 
-        u.rol_id,                    -- 👈 ID del rol para el frontend
-        u.sede_id,                   -- 👈 ID de la sede para filtrar
-        r.nombre AS rol, 
-        s.nombre AS sede, 
-        u.qr_code,
-        u.turno_id,                  -- 👈 ID del turno
-        t.nombre_turno AS turno      -- 👈 Nombre del turno
-       FROM usuarios u
-       JOIN roles r ON u.rol_id = r.id_rol
-       JOIN sedes s ON u.sede_id = s.id_sede
-       LEFT JOIN turnos t ON u.turno_id = t.id_turno
-       ORDER BY u.id_usuario ASC`
+    u.id_usuario, 
+    u.nombre, 
+    u.apellidos, 
+    u.dni, 
+    u.email, 
+    u.rol_id,
+    u.sede_id,
+    u.remuneracion,        -- ✅ agrega esta línea
+    r.nombre AS rol, 
+    s.nombre AS sede, 
+    u.qr_code,
+    u.turno_id,
+    t.nombre_turno AS turno
+   FROM usuarios u
+   JOIN roles r ON u.rol_id = r.id_rol
+   JOIN sedes s ON u.sede_id = s.id_sede
+   LEFT JOIN turnos t ON u.turno_id = t.id_turno
+   ORDER BY u.id_usuario ASC`,
     );
 
     res.json(result.rows);
@@ -85,7 +116,7 @@ export const deleteUser = async (req, res) => {
     // Eliminamos el usuario
     const result = await pool.query(
       "DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *",
-      [id]
+      [id],
     );
 
     if (result.rowCount === 0) {
@@ -106,12 +137,13 @@ export const deleteUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, apellidos, dni, email, rol_id, sede_id, turno_id } = req.body;
+    const { nombre, apellidos, dni, email, rol_id, sede_id, turno_id } =
+      req.body;
 
     // Verificar si el usuario existe
     const checkUser = await pool.query(
       "SELECT * FROM usuarios WHERE id_usuario = $1",
-      [id]
+      [id],
     );
 
     if (checkUser.rowCount === 0) {
@@ -125,7 +157,7 @@ export const updateUser = async (req, res) => {
            rol_id = $5, sede_id = $6, turno_id = $7
        WHERE id_usuario = $8 
        RETURNING *`,
-      [nombre, apellidos, dni, email, rol_id, sede_id, turno_id || null, id]
+      [nombre, apellidos, dni, email, rol_id, sede_id, turno_id || null, id],
     );
 
     // Obtener datos completos con joins para la respuesta
@@ -148,7 +180,7 @@ export const updateUser = async (req, res) => {
        JOIN sedes s ON u.sede_id = s.id_sede
        LEFT JOIN turnos t ON u.turno_id = t.id_turno
        WHERE u.id_usuario = $1`,
-      [id]
+      [id],
     );
 
     res.json({
