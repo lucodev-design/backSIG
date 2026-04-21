@@ -192,10 +192,13 @@ export const loginUser = async (req, res) => {
     u.remuneracion,        
     r.nombre AS rol,
     u.sede_id,
-    s.nombre AS sede
+    s.nombre AS sede,
+    u.turno_id,
+    t.nombre_turno AS turno   -- 👈 NUEVO
   FROM usuarios u
   JOIN roles r ON u.rol_id = r.id_rol
   JOIN sedes s ON u.sede_id = s.id_sede
+  LEFT JOIN turnos t ON u.turno_id = t.id_turno  -- 👈 CLAVE
   WHERE u.email = $1
 `;
 
@@ -239,18 +242,20 @@ export const loginUser = async (req, res) => {
   message: `Bienvenido ${user.nombre}`,
   token: tokenTrabajador,
   user: {
-    id_usuario: user.id_usuario,
-    id: user.id_usuario,
-    nombre: user.nombre,
-    apellidos: user.apellidos,
-    email: user.email,
-    rol: user.rol,
-    rol_id: user.rol_id,
-    sede_id: user.sede_id,
-    sede: user.sede,
-    remuneracion: user.remuneracion,  
-    tipo: "usuario",
-  },
+  id_usuario: user.id_usuario,
+  id: user.id_usuario,
+  nombre: user.nombre,
+  apellidos: user.apellidos,
+  email: user.email,
+  rol: user.rol,
+  rol_id: user.rol_id,
+  sede_id: user.sede_id,
+  sede: user.sede,
+  turno: user.turno,              // 👈 NUEVO
+  turno_id: user.turno_id,        // 👈 OPCIONAL (recomendado)
+  remuneracion: user.remuneracion,
+  tipo: "usuario",
+},
 });
 
   } catch (err) {
