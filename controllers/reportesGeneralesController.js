@@ -10,6 +10,14 @@ import { toZonedTime } from "date-fns-tz";
 
 const TIMEZONE_PERU = "America/Lima";
 
+// ✅ Estados reales de la DB
+const ESTADOS_PRESENTE = ["A Tiempo", "Salida Normal", "Salida Tolerada"];
+const ESTADOS_TARDANZA = ["Tarde/Descuento", "Salida Temprana/Descuento"];
+
+// ✅ SQL IN clause para usar en queries
+const SQL_PRESENTE = `('A Tiempo', 'Salida Normal', 'Salida Tolerada')`;
+const SQL_TARDANZA = `('Tarde/Descuento', 'Salida Temprana/Descuento')`;
+
 const getFechaPeruFormateada = () => {
   const now = new Date();
   const zonedDate = toZonedTime(now, TIMEZONE_PERU);
@@ -107,21 +115,20 @@ export const generarReporteConsolidado = async (req, res) => {
 
     const query = `
       SELECT
-        s.nombre                                                      AS sede,
-        COUNT(DISTINCT u.id_usuario)                                  AS total_trabajadores,
-        -- ✅ Conteo real por estado
-        COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END)         AS asistencias,
-        COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END)         AS tardanzas,
-        COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END)         AS faltas,
-        -- ✅ Porcentaje solo sobre registros reales de asistencia
+        s.nombre                                                                AS sede,
+        COUNT(DISTINCT u.id_usuario)                                            AS total_trabajadores,
+        COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END)             AS asistencias,
+        COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END)             AS tardanzas,
+        COUNT(CASE WHEN asis.estado NOT IN ${SQL_PRESENTE}
+                    AND asis.estado NOT IN ${SQL_TARDANZA}
+                    AND asis.estado IS NOT NULL THEN 1 END)                    AS faltas,
         ROUND(
-          COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) * 100.0
+          COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) * 100.0
           / NULLIF(
-              COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END),
+              COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) +
+              COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END),
             0), 2
-        )                                                             AS porcentaje_asistencia
+        )                                                                       AS porcentaje_asistencia
       FROM sedes s
       LEFT JOIN usuarios u ON u.sede_id = s.id_sede
       LEFT JOIN (
@@ -180,21 +187,21 @@ export const generarReportePorSede = async (req, res) => {
 
     const query = `
       SELECT
-        u.nombre || ' ' || u.apellidos                                AS trabajador,
+        u.nombre || ' ' || u.apellidos                                          AS trabajador,
         u.dni,
-        r.nombre                                                      AS rol,
-        COUNT(CASE WHEN asis.estado = 'Presente'  THEN 1 END)        AS dias_presente,
-        COUNT(CASE WHEN asis.estado = 'Tardanza'  THEN 1 END)        AS dias_tardanza,
-        COUNT(CASE WHEN asis.estado = 'Falta'     THEN 1 END)        AS dias_falta,
-        -- ✅ Porcentaje solo sobre registros reales
+        r.nombre                                                                AS rol,
+        COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END)             AS dias_presente,
+        COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END)             AS dias_tardanza,
+        COUNT(CASE WHEN asis.estado NOT IN ${SQL_PRESENTE}
+                    AND asis.estado NOT IN ${SQL_TARDANZA}
+                    AND asis.estado IS NOT NULL THEN 1 END)                    AS dias_falta,
         ROUND(
-          COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) * 100.0
+          COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) * 100.0
           / NULLIF(
-              COUNT(CASE WHEN asis.estado = 'Presente' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado = 'Tardanza' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado = 'Falta'    THEN 1 END),
+              COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) +
+              COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END),
             0), 2
-        )                                                             AS porcentaje_asistencia
+        )                                                                       AS porcentaje_asistencia
       FROM usuarios u
       INNER JOIN roles r ON u.rol_id = r.id_rol
       LEFT JOIN (
@@ -268,14 +275,18 @@ export const generarReportePorTrabajador = async (req, res) => {
 
     const result = await pool.query(query, params);
 
-    // ✅ Conteo correcto directo desde las filas retornadas
-    const total_asistencias = result.rows.filter(
-      (r) => r.estado === "Presente",
+    // ✅ Conteo con los estados reales de la DB
+    const total_asistencias = result.rows.filter((r) =>
+      ESTADOS_PRESENTE.includes(r.estado),
     ).length;
-    const total_tardanzas = result.rows.filter(
-      (r) => r.estado === "Tardanza",
+    const total_tardanzas = result.rows.filter((r) =>
+      ESTADOS_TARDANZA.includes(r.estado),
     ).length;
-    const total_faltas = result.rows.filter((r) => r.estado === "Falta").length;
+    const total_faltas = result.rows.filter(
+      (r) =>
+        !ESTADOS_PRESENTE.includes(r.estado) &&
+        !ESTADOS_TARDANZA.includes(r.estado),
+    ).length;
     const total = total_asistencias + total_tardanzas + total_faltas;
 
     const estadisticas = {
@@ -326,15 +337,16 @@ const obtenerDatosParaExportacion = async (
       SELECT
         s.nombre AS sede,
         COUNT(DISTINCT u.id_usuario) AS total_trabajadores,
-        COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) AS asistencias,
-        COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) AS tardanzas,
-        COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END) AS faltas,
+        COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) AS asistencias,
+        COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END) AS tardanzas,
+        COUNT(CASE WHEN asis.estado NOT IN ${SQL_PRESENTE}
+                    AND asis.estado NOT IN ${SQL_TARDANZA}
+                    AND asis.estado IS NOT NULL THEN 1 END)        AS faltas,
         ROUND(
-          COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) * 100.0
+          COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) * 100.0
           / NULLIF(
-              COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END),
+              COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) +
+              COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END),
             0), 2
         ) AS porcentaje_asistencia
       FROM sedes s
@@ -359,15 +371,16 @@ const obtenerDatosParaExportacion = async (
         u.nombre||' '||u.apellidos AS trabajador,
         u.dni,
         r.nombre AS rol,
-        COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) AS dias_presente,
-        COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) AS dias_tardanza,
-        COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END) AS dias_falta,
+        COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) AS dias_presente,
+        COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END) AS dias_tardanza,
+        COUNT(CASE WHEN asis.estado NOT IN ${SQL_PRESENTE}
+                    AND asis.estado NOT IN ${SQL_TARDANZA}
+                    AND asis.estado IS NOT NULL THEN 1 END)        AS dias_falta,
         ROUND(
-          COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) * 100.0
+          COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) * 100.0
           / NULLIF(
-              COUNT(CASE WHEN asis.estado='Presente' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado='Tardanza' THEN 1 END) +
-              COUNT(CASE WHEN asis.estado='Falta'    THEN 1 END),
+              COUNT(CASE WHEN asis.estado IN ${SQL_PRESENTE} THEN 1 END) +
+              COUNT(CASE WHEN asis.estado IN ${SQL_TARDANZA} THEN 1 END),
             0), 2
         ) AS porcentaje_asistencia
       FROM usuarios u
@@ -378,7 +391,7 @@ const obtenerDatosParaExportacion = async (
     `;
     params = [sedeId, ...pp];
   } else {
-    // ✅ Sin a.observaciones — columna no existe en la tabla
+    // trabajador
     const { whereExtra, params: pp } = buildPeriodoWhere(
       periodo,
       mes,
